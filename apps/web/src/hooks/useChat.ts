@@ -4,6 +4,7 @@ import { getSolanaChainInfo, getSolanaTokens, getMultipleRoutes } from '../utils
 import { executeX402Payment } from '../utils/x402';
 import { checkProtocolHealth } from '../utils/sentinel';
 import { getJupiterQuote, TOKENS } from '../utils/jupiter';
+import { buildDepositOnlyTx, buildWithdrawTx, buildTransferTx, getVaultBalance, findSolVaultAddress } from '../utils/solana';
 
 const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC || 'https://api.devnet.solana.com';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
@@ -32,7 +33,8 @@ export type Message = {
 export function useChat(
   solanaAddress: string | null, 
   balance: number,
-  signTransaction?: (tx: Transaction) => Promise<Transaction>
+  signTransaction?: (tx: Transaction) => Promise<Transaction>,
+  onBalanceRefresh?: () => void
 ) {
   const [messages, setMessages] = useState<Message[]>([{
     id: 'welcome-1',
@@ -238,6 +240,142 @@ export function useChat(
           );
           break;
         }
+
+        // ═══════════════════════════════════════
+        // DEPOSIT — Fund the Sentinel Vault
+        // ═══════════════════════════════════════
+        case 'deposit': {
+          const amount = (targetProtocol as any as number) || 0.1;
+          addMessage('user', `Deposit ${amount} SOL to Sentinel Vault`);
+
+          if (balance < amount) {
+            addMessage('agent', `Insufficient balance.\nWallet: ${balance.toFixed(4)} SOL\nRequested: ${amount} SOL`);
+            break;
+          }
+
+          addMessage('agent', `VAULT DEPOSIT\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nBuilding deposit transaction...\nAmount: ${amount} SOL\nDestination: Sentinel PDA Vault`);
+
+          const depositTx = await buildDepositOnlyTx(new PublicKey(solanaAddress), amount);
+          const depositSig = await realSignAndSend(depositTx);
+
+          const vaultBal = await getVaultBalance(new PublicKey(solanaAddress));
+          addMessage('agent',
+            `[✓] DEPOSIT CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Amount: ${amount} SOL\n` +
+            `Tx: ${depositSig.slice(0, 24)}...\n` +
+            `Explorer: https://explorer.solana.com/tx/${depositSig}?cluster=devnet\n\n` +
+            `Vault Balance: ${vaultBal.toFixed(4)} SOL\n` +
+            `Sentinel monitoring is now active for your vault.`
+          );
+          onBalanceRefresh?.();
+          break;
+        }
+
+        // ═══════════════════════════════════════
+        // WITHDRAW — Pull funds from Vault
+        // ═══════════════════════════════════════
+        case 'withdraw': {
+          const wAmount = (targetProtocol as any as number) || 0.1;
+          addMessage('user', `Withdraw ${wAmount} SOL from Sentinel Vault`);
+
+          const vaultBalBefore = await getVaultBalance(new PublicKey(solanaAddress));
+          addMessage('agent',
+            `VAULT WITHDRAWAL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Vault Balance: ${vaultBalBefore.toFixed(4)} SOL\n` +
+            `Requested: ${wAmount} SOL\n\n` +
+            `Building withdrawal transaction...`
+          );
+
+          try {
+            const { tx: withdrawTx, vaultBalance: vBal } = await buildWithdrawTx(
+              new PublicKey(solanaAddress), wAmount
+            );
+            const withdrawSig = await realSignAndSend(withdrawTx);
+
+            addMessage('agent',
+              `[✓] WITHDRAWAL CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+              `Amount: ${wAmount} SOL\n` +
+              `Tx: ${withdrawSig.slice(0, 24)}...\n` +
+              `Explorer: https://explorer.solana.com/tx/${withdrawSig}?cluster=devnet\n\n` +
+              `Remaining Vault Balance: ${(vBal - wAmount).toFixed(4)} SOL\n` +
+              `Funds returned to your wallet.`
+            );
+          } catch (wErr: any) {
+            addMessage('agent', `Withdrawal Failed: ${wErr.message}`);
+          }
+          onBalanceRefresh?.();
+          break;
+        }
+
+        // ═══════════════════════════════════════
+        // TRANSFER — Send SOL to another address
+        // ═══════════════════════════════════════
+        case 'transfer': {
+          // targetProtocol is repurposed as a JSON string: {amount, to}
+          let tAmount = 0.01;
+          let tTo = '';
+          try {
+            const parsed = JSON.parse(targetProtocol as string);
+            tAmount = parsed.amount;
+            tTo = parsed.to;
+          } catch {
+            addMessage('agent', `Invalid transfer command.\nUsage: transfer <amount> SOL to <address>`);
+            break;
+          }
+
+          if (!tTo || tTo.length < 32) {
+            addMessage('agent', `Invalid destination address.\nPlease provide a valid Solana public key.`);
+            break;
+          }
+
+          if (balance < tAmount) {
+            addMessage('agent', `Insufficient balance.\nWallet: ${balance.toFixed(4)} SOL\nRequested: ${tAmount} SOL`);
+            break;
+          }
+
+          addMessage('user', `Transfer ${tAmount} SOL to ${tTo.slice(0,8)}...${tTo.slice(-4)}`);
+          addMessage('agent',
+            `SOL TRANSFER\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Amount: ${tAmount} SOL\n` +
+            `To: ${tTo}\n\n` +
+            `Requesting wallet signature...`
+          );
+
+          const transferTx = buildTransferTx(
+            new PublicKey(solanaAddress),
+            new PublicKey(tTo),
+            tAmount
+          );
+          const transferSig = await realSignAndSend(transferTx);
+
+          addMessage('agent',
+            `[✓] TRANSFER CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Amount: ${tAmount} SOL\n` +
+            `To: ${tTo.slice(0,8)}...${tTo.slice(-4)}\n` +
+            `Tx: ${transferSig.slice(0, 24)}...\n` +
+            `Explorer: https://explorer.solana.com/tx/${transferSig}?cluster=devnet\n\n` +
+            `Transfer complete.`
+          );
+          onBalanceRefresh?.();
+          break;
+        }
+
+        // ═══════════════════════════════════════
+        // VAULT STATUS — Check vault balance
+        // ═══════════════════════════════════════
+        case 'vault_status': {
+          addMessage('user', 'Check vault status');
+          const [solVaultAddr] = findSolVaultAddress(new PublicKey(solanaAddress));
+          const vBal = await getVaultBalance(new PublicKey(solanaAddress));
+          addMessage('agent',
+            `SENTINEL VAULT STATUS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Vault PDA: ${solVaultAddr.toBase58().slice(0,12)}...\n` +
+            `Vault Balance: ${vBal.toFixed(4)} SOL\n` +
+            `Wallet Balance: ${balance.toFixed(4)} SOL\n\n` +
+            `${vBal > 0 ? '✓ Vault is funded. Sentinel protection active.' : '○ Vault is empty. Use "deposit" to fund it.'}`
+          );
+          break;
+        }
       }
     } catch (error: any) {
       console.error('[useChat] Action failed:', error);
@@ -253,33 +391,59 @@ export function useChat(
     addMessage('user', text);
     setIsTyping(true);
 
-    const lower = text.toLowerCase();
+    const lower = text.toLowerCase().trim();
     
     // Parse protocol target
     let target = 'Kamino';
     if (lower.includes('marginfi')) target = 'MarginFi';
     else if (lower.includes('drift')) target = 'Drift';
 
-    if (lower.includes('scan') || lower.includes('risk') || lower.includes('x402') || lower.includes('deep')) {
-      await handleChipAction('deep_scan', target);
-    } else if (lower.includes('bridge') || lower.includes('haven') || lower.includes('lifi') || lower.includes('cross') || lower.includes('escape')) {
-      await handleChipAction('simulate_deposit');
-    } else if (lower.includes('yield') || lower.includes('auto') || lower.includes('jupiter') || lower.includes('swap')) {
-      await handleChipAction('enable_autopilot');
-    } else if (lower.includes('eject') || lower.includes('emergency')) {
-      await executeBridge();
-    } else {
-      addMessage('agent', 
-        `Command not recognized: "${text}"\n\n` +
-        `Available commands:\n` +
-        `  "scan"     — Deep protocol risk scan (x402)\n` +
-        `  "bridge"   — Query LI.FI escape routes\n` +
-        `  "autopilot" — Jupiter yield optimization\n` +
-        `  "eject"    — Emergency ZK-Eject`
-      );
+    // Parse amount from text (e.g. "deposit 0.5 sol")
+    const amountMatch = lower.match(/(\d+\.?\d*)\s*sol/i);
+    const parsedAmount = amountMatch ? parseFloat(amountMatch[1]) : 0;
+
+    // Parse transfer destination (e.g. "transfer 0.1 sol to <address>")
+    const transferMatch = lower.match(/(?:transfer|send)\s+(\d+\.?\d*)\s*sol\s+(?:to\s+)?(\w{32,})/i);
+
+    try {
+      if (lower.startsWith('deposit') && parsedAmount > 0) {
+        await handleChipAction('deposit', parsedAmount as any);
+      } else if (lower.startsWith('withdraw') && parsedAmount > 0) {
+        await handleChipAction('withdraw', parsedAmount as any);
+      } else if (transferMatch) {
+        const tAmount = parseFloat(transferMatch[1]);
+        const tAddr = transferMatch[2];
+        await handleChipAction('transfer', JSON.stringify({ amount: tAmount, to: tAddr }) as any);
+      } else if (lower.includes('vault') && (lower.includes('status') || lower.includes('balance') || lower.includes('check'))) {
+        await handleChipAction('vault_status');
+      } else if (lower.includes('scan') || lower.includes('risk') || lower.includes('x402') || lower.includes('deep')) {
+        await handleChipAction('deep_scan', target);
+      } else if (lower.includes('bridge') || lower.includes('haven') || lower.includes('lifi') || lower.includes('cross') || lower.includes('escape')) {
+        await handleChipAction('simulate_deposit');
+      } else if (lower.includes('yield') || lower.includes('auto') || lower.includes('jupiter') || lower.includes('swap')) {
+        await handleChipAction('enable_autopilot');
+      } else if (lower.includes('eject') || lower.includes('emergency')) {
+        await executeBridge();
+      } else {
+        addMessage('agent', 
+          `Command not recognized: "${text}"\n\n` +
+          `Available commands:\n` +
+          `  "deposit 0.1 sol"       — Fund your Sentinel Vault\n` +
+          `  "withdraw 0.1 sol"      — Pull funds from vault\n` +
+          `  "transfer 0.1 sol to <addr>" — Send SOL\n` +
+          `  "vault status"          — Check vault balance\n` +
+          `  "scan"                  — Deep risk scan (x402)\n` +
+          `  "bridge"                — LI.FI escape routes\n` +
+          `  "autopilot"             — Jupiter yield optimization\n` +
+          `  "eject"                 — Emergency ZK-Eject`
+        );
+        setIsTyping(false);
+      }
+    } catch (error: any) {
+      addMessage('agent', `Error: ${error.message || 'Command failed'}`);
       setIsTyping(false);
     }
-  }, [solanaAddress, handleChipAction, addMessage]);
+  }, [solanaAddress, handleChipAction, addMessage, executeBridge]);
 
   const executeBridge = useCallback(async () => {
     if (!solanaAddress) return;

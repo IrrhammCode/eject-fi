@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePrivy, useWallets, useSolanaWallets } from '@privy-io/react-auth';
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
-import { Shield, Zap, Activity, ShieldAlert, Cpu, Route, Send, TrendingUp, ChevronRight, LogOut, Wifi, BarChart3, Fingerprint, Lock, ArrowRightLeft, Terminal } from 'lucide-react';
+import { Shield, Zap, Activity, ShieldAlert, Cpu, Route, Send, TrendingUp, ChevronRight, LogOut, Wifi, BarChart3, Fingerprint, Lock, ArrowRightLeft, Terminal, ArrowDownToLine, ArrowUpFromLine, Copy, Vault } from 'lucide-react';
 import { useChat } from './hooks/useChat';
 import { checkProtocolHealth } from './utils/sentinel';
 import { getSolPrice } from './utils/sentinel';
@@ -34,6 +34,17 @@ function App() {
     // Fallback: request method
     return await provider.request({ method: 'signTransaction', params: { transaction: tx } });
   }, [solanaWallet]);
+  // Balance refresh function (reusable + passed to useChat)
+  const refreshBalance = useCallback(async () => {
+    if (solanaWallet?.address) {
+      try {
+        const bal = await connection.getBalance(new PublicKey(solanaWallet.address));
+        setBalance(bal / 1e9);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [solanaWallet?.address]);
 
   const { 
     messages, 
@@ -41,24 +52,16 @@ function App() {
     handleChipAction, 
     sendMessage, 
     executeBridge 
-  } = useChat(solanaWallet?.address || null, balance, signTransaction);
+  } = useChat(solanaWallet?.address || null, balance, signTransaction, refreshBalance);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch balance
+  // Fetch balance on load + auto-refresh every 15s
   useEffect(() => {
-    if (solanaWallet?.address) {
-      const fetchBalance = async () => {
-        try {
-          const bal = await connection.getBalance(new PublicKey(solanaWallet.address));
-          setBalance(bal / 1e9);
-        } catch (e) {
-          console.error(e);
-        }
-      };
-      fetchBalance();
-    }
-  }, [solanaWallet?.address]);
+    refreshBalance();
+    const interval = setInterval(refreshBalance, 15_000);
+    return () => clearInterval(interval);
+  }, [refreshBalance]);
 
   // Fetch system health + live SOL price from Pyth
   useEffect(() => {
@@ -181,10 +184,20 @@ function App() {
           <img src="/assets/sentinel_hero.png" alt="Eject.fi" className="header-logo" />
           <span className="logo-text">Eject.fi</span>
         </div>
-        <button className="logout-btn" onClick={logout}>
-          <LogOut size={14} />
-          <span>Disconnect</span>
-        </button>
+        <div className="header-right">
+          {solanaWallet?.address && (
+            <button className="copy-addr-btn" onClick={() => {
+              navigator.clipboard.writeText(solanaWallet.address);
+            }} title="Copy wallet address">
+              <Copy size={12} />
+              <span>{solanaWallet.address.slice(0, 4)}...{solanaWallet.address.slice(-4)}</span>
+            </button>
+          )}
+          <button className="logout-btn" onClick={logout}>
+            <LogOut size={14} />
+            <span>Disconnect</span>
+          </button>
+        </div>
       </header>
 
       <div className="scroll-content">
@@ -215,6 +228,24 @@ function App() {
               <TrendingUp size={10} />
               <span>+2.4%</span>
             </div>
+          </div>
+
+          <div className="vault-divider" />
+
+          {/* Quick Action Buttons — Deposit / Withdraw / Send / Vault */}
+          <div className="wallet-actions">
+            <button className="wallet-action-btn deposit" onClick={() => handleChipAction('deposit', 0.1 as any)} disabled={isTyping}>
+              <ArrowDownToLine size={16} />
+              <span>Deposit</span>
+            </button>
+            <button className="wallet-action-btn withdraw" onClick={() => handleChipAction('withdraw', 0.05 as any)} disabled={isTyping}>
+              <ArrowUpFromLine size={16} />
+              <span>Withdraw</span>
+            </button>
+            <button className="wallet-action-btn send" onClick={() => sendMessage('vault status')} disabled={isTyping}>
+              <Vault size={16} />
+              <span>Vault</span>
+            </button>
           </div>
 
           <div className="vault-divider" />

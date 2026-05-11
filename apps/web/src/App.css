@@ -291,6 +291,91 @@
   color: var(--accent-red);
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-addr-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(139,92,246,0.08);
+  border: 1px solid rgba(139,92,246,0.15);
+  color: var(--accent-violet);
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  transition: all 0.2s;
+}
+
+.copy-addr-btn:hover {
+  background: rgba(139,92,246,0.15);
+  border-color: rgba(139,92,246,0.3);
+}
+
+/* Wallet Quick Actions */
+.wallet-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0;
+}
+
+.wallet-action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 8px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wallet-action-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-glow);
+}
+
+.wallet-action-btn:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.wallet-action-btn.deposit {
+  color: var(--accent-green);
+}
+.wallet-action-btn.deposit:hover {
+  background: rgba(16,185,129,0.08);
+  border-color: rgba(16,185,129,0.25);
+}
+
+.wallet-action-btn.withdraw {
+  color: var(--accent-gold);
+}
+.wallet-action-btn.withdraw:hover {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.25);
+}
+
+.wallet-action-btn.send {
+  color: var(--accent-blue);
+}
+.wallet-action-btn.send:hover {
+  background: rgba(59,130,246,0.08);
+  border-color: rgba(59,130,246,0.25);
+}
+
 /* Scrollable Content */
 .scroll-content {
   flex: 1;

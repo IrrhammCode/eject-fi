@@ -9,6 +9,7 @@
  */
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getProtocolActivity, detectWhaleExits, getNetworkHealth, type ProtocolActivity, PROTOCOL_ADDRESSES } from './helius';
+import { updateCachedSolPrice } from './lifi';
 
 // --- Configuration ---
 const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC || 'https://api.devnet.solana.com';
@@ -66,8 +67,9 @@ async function fetchPythPrice(): Promise<PythPriceData> {
 
     return { price, confidence, publishTime };
   } catch (error) {
-    console.warn('[Sentinel] Pyth fetch failed, using fallback:', error);
-    return { price: 168.42, confidence: 0.15, publishTime: Math.floor(Date.now() / 1000) };
+    console.warn('[Sentinel] Pyth fetch failed:', error);
+    // Return 0 price to signal failure — no hardcoded fallback
+    return { price: 0, confidence: 0, publishTime: 0 };
   }
 }
 
@@ -181,6 +183,11 @@ export async function checkProtocolHealth(protocol: string): Promise<ProtocolHea
 
   // Determine if we got real data
   const dataSource = priceData.publishTime > (now - 300) ? 'live' : 'fallback';
+
+  // Sync price to LI.FI fallback cache
+  if (priceData.price > 0) {
+    updateCachedSolPrice(priceData.price);
+  }
 
   return {
     utilization,

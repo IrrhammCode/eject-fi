@@ -310,12 +310,21 @@ export async function getSolanaChainInfo(): Promise<{
   }
 }
 
-// --- Fallback Mock ---
+// --- Fallback ---
+
+// Cached SOL price from the last successful Pyth fetch (updated by sentinel.ts)
+let _cachedSolPrice = 0;
+export function updateCachedSolPrice(price: number) {
+  if (price > 0) _cachedSolPrice = price;
+}
 
 function getMockQuote(amount: string): BridgeQuote {
   const solAmount = parseFloat(amount) / 1e9;
-  const solPrice = 168.42;
-  const estimatedUsdc = (solAmount * solPrice * 0.995).toFixed(2);
+  // Use cached Pyth price if available, otherwise indicate unknown
+  const solPrice = _cachedSolPrice > 0 ? _cachedSolPrice : 0;
+  const estimatedUsdc = solPrice > 0 
+    ? (solAmount * solPrice * 0.995).toFixed(2) 
+    : '—';
 
   return {
     route: 'Mayan Swift via LI.FI',

@@ -11,13 +11,14 @@ import { COLORS, SPACING, RADIUS } from '../constants/theme';
 
 interface VaultHeroProps {
   balance: number | null;
+  solPriceUsd: number;
 }
 
-const SOL_PRICE_USD = 168.42;
 
-export function VaultHero({ balance }: VaultHeroProps) {
+
+export function VaultHero({ balance, solPriceUsd }: VaultHeroProps) {
   const sol = balance ?? 0;
-  const usd = (sol * SOL_PRICE_USD).toFixed(2);
+  const usd = solPriceUsd > 0 ? (sol * solPriceUsd).toFixed(2) : '—';
 
   return (
     <View style={styles.container}>

@@ -16,8 +16,10 @@ function App() {
   const solanaWallet = wallets.find((w) => w.walletClientType === 'privy');
 
   const [balance, setBalance] = useState<number>(0);
-  const [solPriceUsd, setSolPriceUsd] = useState<number>(168);
+  const [solPriceUsd, setSolPriceUsd] = useState<number>(0);
+  const [prevSolPrice, setPrevSolPrice] = useState<number>(0);
   const [inputText, setInputText] = useState('');
+  const [swarmCount, setSwarmCount] = useState(0);
   const [systemHealth, setSystemHealth] = useState({
     riskLevel: 'LOW',
     dataSource: 'loading',
@@ -74,10 +76,20 @@ function App() {
           dataSource: health.dataSource,
           networkTps: health.networkTps,
         });
-        // Use real Pyth price for portfolio USD value
+
+        // Track previous price for delta calculation
         if (health.solPrice > 0) {
+          setPrevSolPrice(prev => prev === 0 ? health.solPrice : solPriceUsd);
           setSolPriceUsd(health.solPrice);
         }
+
+        // Compute dynamic swarm agent count based on API connectivity
+        let agents = 0;
+        if (health.solPrice > 0) agents++;           // Pyth Oracle
+        if (health.networkTps > 0) agents++;          // Helius RPC
+        if (health.activity?.dataSource === 'live') agents++; // Helius Activity
+        if (health.dataSource === 'live') agents++;   // Solana RPC
+        setSwarmCount(agents);
       } catch (error) {
         console.warn('[ChatScreen] Health fetch failed:', error);
       }
@@ -173,8 +185,11 @@ function App() {
     );
   }
 
-  // ─── MAIN DASHBOARD ───
-  const usd = (balance * solPriceUsd).toFixed(2);
+  const usd = solPriceUsd > 0 ? (balance * solPriceUsd).toFixed(2) : '—';
+  const priceDelta = prevSolPrice > 0 && solPriceUsd > 0
+    ? (((solPriceUsd - prevSolPrice) / prevSolPrice) * 100)
+    : 0;
+  const priceChangeStr = priceDelta >= 0 ? `+${priceDelta.toFixed(2)}%` : `${priceDelta.toFixed(2)}%`;
 
   return (
     <div className="app-container">
@@ -224,10 +239,14 @@ function App() {
           <div className="vault-usd">${usd}</div>
           <div className="sol-row">
             <span className="sol-value">{balance.toFixed(4)} SOL</span>
-            <div className="change-badge">
-              <TrendingUp size={10} />
-              <span>+2.4%</span>
-            </div>
+            {solPriceUsd > 0 && (
+              <div className="change-badge" style={{
+                background: priceDelta >= 0 ? 'var(--accent-green-dim)' : 'var(--accent-red-dim)',
+              }}>
+                <TrendingUp size={10} style={{ color: priceDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }} />
+                <span style={{ color: priceDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{priceChangeStr}</span>
+              </div>
+            )}
           </div>
 
           <div className="vault-divider" />
@@ -261,7 +280,7 @@ function App() {
             <div className="status-item">
               <Cpu size={16} color="#3B82F6" />
               <span className="status-item-label">Swarm</span>
-              <span className="status-item-value" style={{ color: '#3B82F6' }}>3 Active</span>
+              <span className="status-item-value" style={{ color: '#3B82F6' }}>{swarmCount} Active</span>
             </div>
             <div className="status-row-divider" />
             <div className="status-item">
@@ -304,7 +323,7 @@ function App() {
                 <Wifi size={18} color="#10B981" />
               </div>
               <span className="bento-title">Swarm</span>
-              <span className="bento-sub">4 agents live</span>
+              <span className="bento-sub">{swarmCount} agents live</span>
             </button>
           </div>
 

@@ -44,6 +44,7 @@ export function ChatScreen({
     dataSource: 'loading',
     networkTps: 0,
   });
+  const [solPriceUsd, setSolPriceUsd] = useState<number>(0);
 
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
 
@@ -67,6 +68,9 @@ export function ChatScreen({
           dataSource: health.dataSource,
           networkTps: health.networkTps,
         });
+        if (health.solPrice > 0) {
+          setSolPriceUsd(health.solPrice);
+        }
       } catch (error) {
         console.warn('[ChatScreen] Health fetch failed:', error);
       }
@@ -127,7 +131,7 @@ export function ChatScreen({
         </View>
 
         {/* Massive Balance & Assurance */}
-        <VaultHero balance={wallet.balance} />
+        <VaultHero balance={wallet.balance} solPriceUsd={solPriceUsd} />
 
         {/* Bento Box Control Center */}
         <ActionGrid 

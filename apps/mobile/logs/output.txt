@@ -1,0 +1,26 @@
+    Finished `release` profile [optimized] target(s) in 0.36s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (/69fd8741be9241901c1cd548/target/debug/deps/workspace-51ba4ba41e55366b)
+
+Found a 'test' script in the Anchor.toml. Running it as a test suite!
+
+Running test suite: "/69fd8741be9241901c1cd548/Anchor.toml"
+
+yarn run v1.22.22
+$ /69fd8741be9241901c1cd548/node_modules/.bin/ts-mocha -p ./tsconfig.json -t 1000000 'tests/**/*.ts'
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+
+  Eject.fi - Cross-Chain DeFi Protocol
+    ✔ Initialize Config (411ms)
+    ✔ Initialize Vault - solver pays, PDA seeded by EVM address (403ms)
+    ✔ Emergency Exit - sentinel transfers tokens via Token-2022 (407ms)
+    ✔ Emergency Exit - FAILS for unauthorized signer (not sentinel)
+    ✔ Deactivate Vault - sentinel only (393ms)
+    ✔ Emergency Exit - FAILS on deactivated vault
+    ✔ Deactivate Vault - FAILS for unauthorized user (395ms)
+
+
+  7 passing (6s)
+
+Done in 6.90s.

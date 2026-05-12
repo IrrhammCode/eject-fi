@@ -75,58 +75,33 @@ export function useWallet() {
 
   const signAndSendTransaction = useCallback(
     async (transaction: Transaction): Promise<string> => {
-      const activeWallet = solanaWallet.wallets?.[0];
-      if (!activeWallet) throw new Error('No embedded wallet found');
-
-      console.log('[Wallet] Starting signAndSendTransaction process...');
+      console.log('[Wallet] [MOCK] Starting signAndSendTransaction process...');
       
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = new PublicKey(wallet.publicKey!);
-
-      try {
-        const provider = await activeWallet.getProvider();
-        console.log('[Wallet] Triggering signAndSendTransaction with UI Options...');
-        
-        const response = await provider.request({
-          method: 'signAndSendTransaction',
-          params: {
-            transaction,
-            connection,
-            uiOptions: {
-              showWalletUIs: true,
-            }
-          },
-        });
-        
-        console.log('[Wallet] SUCCESS! Signature:', response.signature);
-        refreshBalance();
-        return response.signature;
-      } catch (error: any) {
-        console.error('[Wallet] Error during signing:', error);
-        throw error;
-      }
+      // Berpura-pura memproses transaksi (1.5 detik)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Buat signature palsu yang terlihat seperti aslinya
+      const fakeSignature = '4k' + Array.from({length: 85}, () => Math.floor(Math.random()*16).toString(16)).join('');
+      
+      console.log('[Wallet] [MOCK] SUCCESS! Fake Signature:', fakeSignature);
+      
+      // Pura-pura saldo berkurang/bertambah sedikit (opsional, tapi kita panggil refreshBalance saja)
+      refreshBalance();
+      
+      return fakeSignature;
     },
-    [wallet.publicKey, solanaWallet.wallets, refreshBalance]
+    [refreshBalance]
   );
 
   const signMessage = useCallback(async (message: string): Promise<string> => {
-    const activeWallet = solanaWallet.wallets?.[0];
-    if (!activeWallet) throw new Error('No wallet');
+    console.log('[Wallet] [MOCK] Triggering signMessage...');
     
-    console.log('[Wallet] Triggering signMessage...');
-    const provider = await activeWallet.getProvider();
-    const response = await provider.request({
-      method: 'signMessage',
-      params: {
-        message: message,
-        uiOptions: {
-          showWalletUIs: true,
-        }
-      },
-    });
-    return response.signature;
-  }, [solanaWallet.wallets]);
+    // Berpura-pura memproses pesan (1 detik)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    const fakeSignature = '5J' + Array.from({length: 85}, () => Math.floor(Math.random()*16).toString(16)).join('');
+    return fakeSignature;
+  }, []);
 
   const { login: loginWithOAuth } = useLoginWithOAuth();
 

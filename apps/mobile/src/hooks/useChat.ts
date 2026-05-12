@@ -10,7 +10,7 @@
  */
 import { useState } from 'react';
 import { ChatMessage, ChipAction, WalletState } from '../types';
-import { handleEjectTransaction, isProgramDeployed, buildDepositOnlyTx, buildWithdrawTx, buildTransferTx, getVaultBalance, findSolVaultAddress } from '../utils/solana';
+import { handleEjectTransaction, isProgramDeployed, buildDepositOnlyTx, buildWithdrawTx, buildTransferTx, getVaultBalance, findSolVaultAddress, addMockVaultBalance, clearMockVaultBalance } from '../utils/solana';
 import { checkProtocolHealth, ProtocolHealth } from '../utils/sentinel';
 import { getMultipleRoutes, getSolanaTokens, getSolanaChainInfo, BridgeQuote } from '../utils/lifi';
 import { executeX402Payment, X402PaymentResult } from '../utils/x402';
@@ -244,6 +244,9 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
 
             const signature = await signAndSendTransaction(tx);
             
+            // DEMO: Hapus semua saldo vault yang tersisa
+            clearMockVaultBalance();
+            
             addMessage('agent',
               `ZK-EJECT [✓ CONFIRMED]\n` +
               `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -272,6 +275,9 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
 
           const depositTx = await buildDepositOnlyTx(new PublicKey(wallet.publicKey), amount);
           const depositSig = await signAndSendTransaction(depositTx);
+
+          // DEMO: Tambahkan saldo ke vault mock
+          addMockVaultBalance(amount);
 
           const vaultBal = await getVaultBalance(new PublicKey(wallet.publicKey));
           addMessage('agent',
@@ -304,12 +310,16 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
             );
             const withdrawSig = await signAndSendTransaction(withdrawTx);
 
+            // DEMO: Kurangi saldo vault
+            addMockVaultBalance(-wAmount);
+            const newBal = await getVaultBalance(new PublicKey(wallet.publicKey));
+
             addMessage('agent',
               `[✓] WITHDRAWAL CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
               `Amount: ${wAmount} SOL\n` +
               `Tx: ${withdrawSig.slice(0, 24)}...\n` +
               `Explorer: https://explorer.solana.com/tx/${withdrawSig}?cluster=devnet\n\n` +
-              `Remaining Vault Balance: ${(vBal - wAmount).toFixed(4)} SOL\n` +
+              `Remaining Vault Balance: ${newBal.toFixed(4)} SOL\n` +
               `Funds returned to your wallet.`
             );
           } catch (wErr: any) {

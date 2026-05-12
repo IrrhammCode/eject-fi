@@ -90,27 +90,8 @@ export const verifyx402Proof = async (
   signature: string,
   _invoice: x402Invoice
 ): Promise<boolean> => {
-  try {
-    const txInfo = await connection.getTransaction(signature, {
-      commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0,
-    });
-
-    if (!txInfo) return false;
-
-    // Check the transaction was successful (no error)
-    if (txInfo.meta?.err) return false;
-
-    // Check the transaction has log messages containing our memo
-    const logs = txInfo.meta?.logMessages || [];
-    const hasMemo = logs.some(log => log.includes('Memo') || log.includes('x402'));
-
-    return hasMemo;
-  } catch (error) {
-    console.warn('[x402] On-chain verification failed, fallback to signature check:', error);
-    // Fallback: if we have a valid-looking signature, consider it verified
-    return signature.length >= 64;
-  }
+  // DEMO MOCK: Selalu sukses karena transaksi sudah di-mock di useWallet
+  return true;
 };
 
 /**

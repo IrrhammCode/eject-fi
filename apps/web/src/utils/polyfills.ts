@@ -32,6 +32,6 @@ if (util && util.promisify) {
 // 5. Zlib Exports
 const zlib = require('browserify-zlib');
 if (zlib) {
-  if (!zlib.inflateRaw) zlib.inflateRaw = (data: any, cb: any) => cb(new Error('zlib.inflateRaw not supported'));
-  if (!zlib.deflateRaw) zlib.deflateRaw = (data: any, cb: any) => cb(new Error('zlib.deflateRaw not supported'));
+  if (!zlib.inflateRaw) zlib.inflateRaw = (_data: any, cb: any) => cb(new Error('zlib.inflateRaw not supported'));
+  if (!zlib.deflateRaw) zlib.deflateRaw = (_data: any, cb: any) => cb(new Error('zlib.deflateRaw not supported'));
 }

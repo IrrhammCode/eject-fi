@@ -11,11 +11,8 @@
  *  3. Verification checks the actual transaction on-chain
  */
 
-import { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
-
-const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC || 'https://api.devnet.solana.com';
-const connection = new Connection(SOLANA_RPC, 'confirmed');
 
 // Tiered pricing for different service levels
 const SERVICE_PRICING: Record<string, number> = {
@@ -87,7 +84,7 @@ export const buildx402Transaction = (
  *  3. The memo data contains the expected service reference
  */
 export const verifyx402Proof = async (
-  signature: string,
+  _signature: string,
   _invoice: x402Invoice
 ): Promise<boolean> => {
   // DEMO MOCK: Always succeed since transactions are mocked

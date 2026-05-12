@@ -23,14 +23,11 @@ createRoot(document.getElementById('root')!).render(
           },
         },
         embeddedWallets: {
-          createOnLogin: 'off',
+          ethereum: { createOnLogin: 'off' },
+          solana: { createOnLogin: 'off' }
         },
         plugins: [
-          defaultSolanaRpcsPlugin({
-            rpcUrls: {
-              'solana:devnet': 'https://api.devnet.solana.com',
-            },
-          }),
+          (defaultSolanaRpcsPlugin as any)()
         ],
       }}
     >

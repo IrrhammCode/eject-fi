@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets, useConnectWallet } from '@privy-io/react-auth';
 import { useCreateWallet, useWallets as useSolanaWallets, useSignTransaction } from '@privy-io/react-auth/solana';
 import { 
-  Shield, Zap, Terminal, Send, TrendingUp, TrendingDown, 
+  Shield, Zap, Terminal, Send, TrendingUp, 
   ArrowUpFromLine, ArrowDownToLine, LogOut, Copy, Activity, 
   Cpu, BarChart3, Route, Wifi, ChevronRight, Fingerprint, 
   Vault, Lock, ArrowRightLeft, ShieldAlert, Loader2, Wallet
@@ -21,8 +21,8 @@ function App() {
   const { signTransaction } = useSignTransaction();
   const solanaWallet = solanaWallets.find((w: any) => w.walletClientType === 'privy') 
                     || solanaWallets[0] 
-                    || wallets.find((w) => w.walletClientType === 'privy' && w.chainType === 'solana') 
-                    || wallets.find((w) => w.chainType === 'solana');
+                    || wallets.find((w: any) => w.walletClientType === 'privy' && (w as any).chainType === 'solana') 
+                    || wallets.find((w: any) => (w as any).chainType === 'solana');
 
   const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
   const [balance, setBalance] = useState(MOCK_WALLET_BALANCE);
@@ -110,7 +110,7 @@ function App() {
       try {
         const stats = await getHeliusStats();
         
-        setPrevSolPrice(prev => (solPriceUsd > 0 ? solPriceUsd : stats.solPrice));
+        setPrevSolPrice(_prev => (solPriceUsd > 0 ? solPriceUsd : stats.solPrice));
         setSolPriceUsd(stats.solPrice);
         
         setSystemHealth({
@@ -158,7 +158,9 @@ function App() {
 
           <div className="login-hero">
             <div className="login-hero-image">
-              <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Eject.fi" />
+              <div className="main-shield-glow">
+                <Shield size={80} color="#8B5CF6" strokeWidth={1.5} />
+              </div>
             </div>
             <div className="title-wrap">
               <span className="title-light">eject</span>

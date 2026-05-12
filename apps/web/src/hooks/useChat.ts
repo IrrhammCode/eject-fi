@@ -1,14 +1,8 @@
 import { useState, useCallback } from 'react';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
-import bs58 from 'bs58';
 import { getSolanaChainInfo, getSolanaTokens, getMultipleRoutes } from '../utils/lifi';
 import { executeX402Payment } from '../utils/x402';
 import { checkProtocolHealth } from '../utils/sentinel';
-import { getJupiterQuote, TOKENS } from '../utils/jupiter';
-import { buildDepositOnlyTx, buildWithdrawTx, buildTransferTx, getVaultBalance, findSolVaultAddress, addMockVaultBalance, clearMockVaultBalance, updateMockWalletBalance, MOCK_WALLET_BALANCE, MOCK_VAULT_BALANCE } from '../utils/solana';
-
-const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC || 'https://api.devnet.solana.com';
-const connection = new Connection(SOLANA_RPC, 'confirmed');
+import { buildDepositOnlyTx, getVaultBalance, findSolVaultAddress, addMockVaultBalance, clearMockVaultBalance, updateMockWalletBalance, MOCK_WALLET_BALANCE } from '../utils/solana';
 
 export type Message = {
   id: string;
@@ -57,6 +51,17 @@ export function useChat(
       type
     }]);
   }, []);
+
+  /**
+   * MOCK Wallet Signer — Simulates signing for hackathon demo
+   */
+  const realSignAndSend = useCallback(async (_tx: Transaction): Promise<string> => {
+    if (!solanaAddress) throw new Error('Wallet not connected');
+    // Simulate 1.5s signing delay
+    await new Promise(r => setTimeout(r, 1500));
+    // Return fake signature
+    return '5K' + Array.from({length: 85}, () => Math.floor(Math.random()*16).toString(16)).join('');
+  }, [solanaAddress]);
 
   const executeBridge = useCallback(async () => {
     if (!solanaAddress) return;
@@ -110,17 +115,6 @@ export function useChat(
     }
     setIsTyping(false);
   }, [solanaAddress, balance, addMessage, realSignAndSend, onBalanceRefresh]);
-
-  /**
-   * MOCK Wallet Signer — Simulates signing for hackathon demo
-   */
-  const realSignAndSend = async (tx: Transaction): Promise<string> => {
-    if (!solanaAddress) throw new Error('Wallet not connected');
-    // Simulate 1.5s signing delay
-    await new Promise(r => setTimeout(r, 1500));
-    // Return fake signature
-    return '5K' + Array.from({length: 85}, () => Math.floor(Math.random()*16).toString(16)).join('');
-  };
 
   const handleChipAction = useCallback(async (actionId: string, targetProtocol: string = 'Kamino') => {
     if (!solanaAddress) {
@@ -284,11 +278,17 @@ export function useChat(
         // ═══════════════════════════════════════
         case 'deposit': {
           let amount = (targetProtocol as any as number);
-          if (!amount || amount <= 0) {
+          if (!amount || amount <= 0 || isNaN(amount)) {
             const input = prompt('How much SOL do you want to deposit?', '0.5');
-            if (!input) break;
+            if (!input) {
+              setIsTyping(false);
+              return;
+            }
             amount = parseFloat(input);
-            if (isNaN(amount) || amount <= 0) break;
+            if (isNaN(amount) || amount <= 0) {
+              setIsTyping(false);
+              return;
+            }
           }
           addMessage('user', `Deposit ${amount} SOL to Sentinel Vault`);
 
@@ -324,11 +324,17 @@ export function useChat(
         // ═══════════════════════════════════════
         case 'withdraw': {
           let wAmount = (targetProtocol as any as number);
-          if (!wAmount || wAmount <= 0) {
+          if (!wAmount || wAmount <= 0 || isNaN(wAmount)) {
             const input = prompt('How much SOL do you want to withdraw?', '0.5');
-            if (!input) break;
+            if (!input) {
+              setIsTyping(false);
+              return;
+            }
             wAmount = parseFloat(input);
-            if (isNaN(wAmount) || wAmount <= 0) break;
+            if (isNaN(wAmount) || wAmount <= 0) {
+              setIsTyping(false);
+              return;
+            }
           }
           addMessage('user', `Withdraw ${wAmount} SOL from Sentinel Vault`);
 

@@ -14,7 +14,6 @@ import {
   TransactionInstruction,
   clusterApiUrl,
 } from '@solana/web3.js';
-import * as BufferLayout from '@solana/buffer-layout';
 import { Buffer } from 'buffer';
 
 // --- Configuration ---
@@ -318,6 +317,6 @@ export function updateMockWalletBalance(amount: number) {
 /**
  * Gets the current SOL balance of the user's vault PDA (MOCKED FOR DEMO).
  */
-export async function getVaultBalance(owner: PublicKey): Promise<number> {
+export async function getVaultBalance(_owner: PublicKey): Promise<number> {
   return MOCK_VAULT_BALANCE;
 }

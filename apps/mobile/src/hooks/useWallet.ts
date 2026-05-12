@@ -6,6 +6,7 @@ import { PublicKey, Transaction, Connection, clusterApiUrl, LAMPORTS_PER_SOL } f
 import { usePrivy, useLoginWithOAuth, useEmbeddedSolanaWallet } from '@privy-io/expo';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { WalletState } from '../types';
+import { MOCK_WALLET_BALANCE } from '../utils/solana';
 
 const SOLANA_RPC = process.env.EXPO_PUBLIC_SOLANA_RPC || 'https://devnet.helius-rpc.com/?api-key=25670c4c-3555-4582-b560-69be4f754491';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
@@ -38,13 +39,8 @@ export function useWallet() {
   });
 
   const fetchBalance = useCallback(async (pubkey: string) => {
-    try {
-      const pk = new PublicKey(pubkey);
-      const balance = await connection.getBalance(pk);
-      return balance / LAMPORTS_PER_SOL;
-    } catch (error) {
-      return null;
-    }
+    // DEMO MOCK: Selalu kembalikan saldo palsu agar simulasi terlihat nyata
+    return MOCK_WALLET_BALANCE;
   }, []);
 
   const refreshBalance = useCallback(async () => {

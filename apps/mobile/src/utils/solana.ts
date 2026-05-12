@@ -313,6 +313,7 @@ export function buildTransferTx(
 // HACKATHON MOCK STATE
 // ═══════════════════════════════════════════════════════════
 export let MOCK_VAULT_BALANCE = 0;
+export let MOCK_WALLET_BALANCE = 12.5; // Saldo awal dompet (palsu)
 
 export function addMockVaultBalance(amount: number) {
   MOCK_VAULT_BALANCE += amount;
@@ -320,6 +321,10 @@ export function addMockVaultBalance(amount: number) {
 
 export function clearMockVaultBalance() {
   MOCK_VAULT_BALANCE = 0;
+}
+
+export function updateMockWalletBalance(amount: number) {
+  MOCK_WALLET_BALANCE += amount; // Pakai minus untuk mengurangi
 }
 
 /**

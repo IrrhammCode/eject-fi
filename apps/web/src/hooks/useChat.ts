@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { PublicKey, Transaction } from '@solana/web3.js';
 import { getSolanaChainInfo, getSolanaTokens, getMultipleRoutes } from '../utils/lifi';
 import { executeX402Payment } from '../utils/x402';
 import { checkProtocolHealth } from '../utils/sentinel';
@@ -28,7 +29,7 @@ export type Message = {
 export function useChat(
   solanaAddress: string | null, 
   balance: number,
-  solanaWallet: any,
+  _solanaWallet: any,
   signTransaction: any,
   onBalanceRefresh?: () => void
 ) {

@@ -1,122 +1,155 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { usePrivy, useWallets, useSolanaWallets } from '@privy-io/react-auth';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
-import { Shield, Zap, Activity, ShieldAlert, Cpu, Route, Send, TrendingUp, ChevronRight, LogOut, Wifi, BarChart3, Fingerprint, Lock, ArrowRightLeft, Terminal, ArrowDownToLine, ArrowUpFromLine, Copy, Vault } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { usePrivy, useWallets, useConnectWallet } from '@privy-io/react-auth';
+import { useCreateWallet, useWallets as useSolanaWallets, useSignTransaction } from '@privy-io/react-auth/solana';
+import { 
+  Shield, Zap, Terminal, Send, TrendingUp, TrendingDown, 
+  ArrowUpFromLine, ArrowDownToLine, LogOut, Copy, Activity, 
+  Cpu, BarChart3, Route, Wifi, ChevronRight, Fingerprint, 
+  Vault, Lock, ArrowRightLeft, ShieldAlert, Loader2, Wallet
+} from 'lucide-react';
 import { useChat } from './hooks/useChat';
-import { checkProtocolHealth } from './utils/sentinel';
-import { getSolPrice } from './utils/sentinel';
+import { getHeliusStats } from './utils/sentinel';
 import './App.css';
 
-const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC || 'https://api.devnet.solana.com';
-const connection = new Connection(SOLANA_RPC, 'confirmed');
-
 function App() {
-  const { ready, authenticated, login, logout } = usePrivy();
+  const { login, logout, authenticated, ready, user } = usePrivy();
   const { wallets } = useWallets();
-  const solanaWallet = wallets.find((w) => w.walletClientType === 'privy');
+  const { wallets: solanaWallets } = useSolanaWallets();
+  const { connectWallet } = useConnectWallet();
+  const { createWallet } = useCreateWallet();
+  const { signTransaction } = useSignTransaction();
+  const solanaWallet = solanaWallets.find((w: any) => w.walletClientType === 'privy') 
+                    || solanaWallets[0] 
+                    || wallets.find((w) => w.walletClientType === 'privy' && w.chainType === 'solana') 
+                    || wallets.find((w) => w.chainType === 'solana');
 
-  const [balance, setBalance] = useState<number>(0);
-  const [solPriceUsd, setSolPriceUsd] = useState<number>(0);
-  const [prevSolPrice, setPrevSolPrice] = useState<number>(0);
-  const [inputText, setInputText] = useState('');
-  const [swarmCount, setSwarmCount] = useState(0);
+  const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
+  const [balance, setBalance] = useState(0);
+  const [solPriceUsd, setSolPriceUsd] = useState(0);
+  const [prevSolPrice, setPrevSolPrice] = useState(0);
+  const [swarmCount, setSwarmCount] = useState(3);
   const [systemHealth, setSystemHealth] = useState({
     riskLevel: 'LOW',
-    dataSource: 'loading',
     networkTps: 0,
+    dataSource: 'sync'
   });
 
-  // Get Privy's real transaction signer
-  const signTransaction = useCallback(async (tx: Transaction): Promise<Transaction> => {
-    if (!solanaWallet) throw new Error('No Privy wallet');
-    const provider = await (solanaWallet as any).getEthereumProvider?.() || await (solanaWallet as any).getProvider?.();
-    if (provider?.signTransaction) {
-      return await provider.signTransaction(tx);
-    }
-    // Fallback: request method
-    return await provider.request({ method: 'signTransaction', params: { transaction: tx } });
-  }, [solanaWallet]);
-  // Balance refresh function (reusable + passed to useChat)
-  const refreshBalance = useCallback(async () => {
+  const [isCreatingWallet, setIsCreatingWallet] = useState(false);
+  const [caughtEvmConflict, setCaughtEvmConflict] = useState(false);
+
+  useEffect(() => {
     if (solanaWallet?.address) {
-      try {
-        const bal = await connection.getBalance(new PublicKey(solanaWallet.address));
-        setBalance(bal / 1e9);
-      } catch (e) {
-        console.error(e);
-      }
+      setSolanaAddress(solanaWallet.address);
     }
-  }, [solanaWallet?.address]);
+  }, [solanaWallet]);
+
+  // Handle Auto-Creation of Solana Wallet
+  const hasEvmWallet = user?.linkedAccounts?.some(
+    account => account.type === 'wallet' && 
+    (account.walletClientType === 'privy' || account.walletClientType === 'privy-v2' || account.connectorType === 'embedded') && 
+    account.chainType !== 'solana'
+  );
+
+  useEffect(() => {
+    if (ready && authenticated && !solanaWallet && !hasEvmWallet && !isCreatingWallet && !caughtEvmConflict) {
+      const initWallet = async () => {
+        try {
+          setIsCreatingWallet(true);
+          await createWallet();
+        } catch (e: any) {
+          console.error('Failed to create Solana wallet', e);
+          const errMsg = e?.message || e?.toString() || '';
+          if (errMsg.includes('User already has an embedded wallet')) {
+            setCaughtEvmConflict(true);
+          }
+        } finally {
+          setIsCreatingWallet(false);
+        }
+      };
+      initWallet();
+    }
+  }, [ready, authenticated, solanaWallet, hasEvmWallet, caughtEvmConflict]);
 
   const { 
     messages, 
     isTyping, 
-    handleChipAction, 
     sendMessage, 
+    handleChipAction,
     executeBridge 
-  } = useChat(solanaWallet?.address || null, balance, signTransaction, refreshBalance);
+  } = useChat(
+    solanaAddress, 
+    balance,
+    solanaWallet,
+    signTransaction,
+    () => fetchBalance()
+  );
 
+  const [inputText, setInputText] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch balance on load + auto-refresh every 15s
-  useEffect(() => {
-    refreshBalance();
-    const interval = setInterval(refreshBalance, 15_000);
-    return () => clearInterval(interval);
-  }, [refreshBalance]);
-
-  // Fetch system health + live SOL price from Pyth
-  useEffect(() => {
-    if (!authenticated) return;
-    const fetchHealth = async () => {
-      try {
-        const health = await checkProtocolHealth('Kamino');
-        setSystemHealth({
-          riskLevel: health.riskLevel,
-          dataSource: health.dataSource,
-          networkTps: health.networkTps,
-        });
-
-        // Track previous price for delta calculation
-        if (health.solPrice > 0) {
-          setPrevSolPrice(prev => prev === 0 ? health.solPrice : solPriceUsd);
-          setSolPriceUsd(health.solPrice);
-        }
-
-        // Compute dynamic swarm agent count based on API connectivity
-        let agents = 0;
-        if (health.solPrice > 0) agents++;           // Pyth Oracle
-        if (health.networkTps > 0) agents++;          // Helius RPC
-        if (health.activity?.dataSource === 'live') agents++; // Helius Activity
-        if (health.dataSource === 'live') agents++;   // Solana RPC
-        setSwarmCount(agents);
-      } catch (error) {
-        console.warn('[ChatScreen] Health fetch failed:', error);
-      }
-    };
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 30_000);
-    return () => clearInterval(interval);
-  }, [authenticated]);
-
-  // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (inputText.trim()) {
-      sendMessage(inputText);
-      setInputText('');
+  const fetchBalance = async () => {
+    if (!solanaAddress) return;
+    try {
+      const response = await fetch(`https://api.devnet.solana.com`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getBalance',
+          params: [solanaAddress]
+        })
+      });
+      const data = await response.json();
+      setBalance(data.result.value / 1e9);
+    } catch (e) {
+      console.error('Balance fetch failed');
     }
   };
 
-  const riskColor = systemHealth.riskLevel === 'CRITICAL' ? '#EF4444'
-    : systemHealth.riskLevel === 'HIGH' ? '#FF9500'
-    : systemHealth.riskLevel === 'MEDIUM' ? '#FFD60A'
-    : '#10B981';
+  useEffect(() => {
+    if (solanaAddress) fetchBalance();
+  }, [solanaAddress]);
 
+  // Sync Live Data (Helius + Pyth)
+  useEffect(() => {
+    const syncData = async () => {
+      try {
+        const stats = await getHeliusStats();
+        
+        setPrevSolPrice(prev => (solPriceUsd > 0 ? solPriceUsd : stats.solPrice));
+        setSolPriceUsd(stats.solPrice);
+        
+        setSystemHealth({
+          riskLevel: stats.riskLevel,
+          networkTps: stats.tps,
+          dataSource: 'live'
+        });
+
+        setSwarmCount(stats.tps > 2500 ? 4 : 3);
+      } catch (e) {
+        setSystemHealth(prev => ({ ...prev, dataSource: 'sync' }));
+      }
+    };
+
+    syncData();
+    const timer = setInterval(syncData, 10000);
+    return () => clearInterval(timer);
+  }, [solPriceUsd]);
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim() || isTyping) return;
+    sendMessage(inputText);
+    setInputText('');
+  };
+
+  const riskColor = systemHealth.riskLevel === 'CRITICAL' ? '#EF4444' : 
+                   systemHealth.riskLevel === 'HIGH' ? '#F59E0B' : '#10B981';
   const sentinelColor = systemHealth.dataSource === 'live' ? '#10B981' : '#FFD60A';
 
   // ─── LOADING ───
@@ -128,61 +161,106 @@ function App() {
   if (!authenticated) {
     return (
       <div className="login-container">
-        {/* Network Badge */}
-        <div className="network-badge">
-          <div className="badge-dot" />
-          <span>Devnet</span>
-        </div>
-
-        {/* Hero */}
-        <div className="login-hero">
-          <div className="login-hero-image">
-            <img src="/assets/sentinel_hero.png" alt="Sentinel AI" />
+        <div className="login-card">
+          <div className="network-badge">
+            <div className="badge-dot" />
+            <span>SOLANA DEVNET</span>
           </div>
 
-          <div className="title-wrap">
-            <span className="title-light">Eject</span>
-            <span className="title-accent">.fi</span>
-          </div>
-
-          <p className="login-subtitle">Autonomous DeFi Security</p>
-
-          <p className="login-body">
-            AI-powered vault monitoring with predictive risk<br/>
-            analysis and zero-knowledge emergency exits.
-          </p>
-
-          {/* Feature Pills */}
-          <div className="feature-pills">
-            <div className="pill">
-              <Cpu size={12} />
-              <span>AI Swarm</span>
+          <div className="login-hero">
+            <div className="login-hero-image">
+              <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Eject.fi" />
             </div>
-            <div className="pill">
-              <Lock size={12} />
-              <span>ZK Privacy</span>
+            <div className="title-wrap">
+              <span className="title-light">eject</span>
+              <span className="title-accent">.fi</span>
             </div>
-            <div className="pill">
-              <ArrowRightLeft size={12} />
-              <span>Cross-Chain</span>
+            <div className="login-subtitle">Capital Rescue Protocol</div>
+            <p className="login-body">
+              Autonomous AI security for your Solana assets. 
+              Predictive monitoring with zero-knowledge emergency exits.
+            </p>
+
+            <div className="feature-pills">
+              <div className="pill"><Shield size={12} /> 24/7 Sentinel</div>
+              <div className="pill"><Zap size={12} /> ZK-Eject</div>
+              <div className="pill"><Cpu size={12} /> AI Swarm</div>
             </div>
           </div>
-        </div>
 
-        {/* Bottom CTA */}
-        <div className="login-bottom">
-          <button className="login-btn" onClick={login}>
-            <span>Connect Wallet</span>
-            <ChevronRight size={16} />
-          </button>
-          <div className="partner-row">
-            <span>Secured by Privy</span>
-            <span className="partner-dot">·</span>
-            <span>Powered by LI.FI</span>
+          <div className="login-bottom">
+            <button className="login-btn" onClick={login}>
+              <Terminal size={20} />
+              Connect Wallet
+            </button>
+            <div className="partner-row">
+              <span>Secured by Privy</span>
+              <span className="partner-dot">·</span>
+              <span>Powered by Helius</span>
+            </div>
           </div>
         </div>
       </div>
     );
+  }
+
+  // ─── CREATE WALLET FALLBACK ───
+  if (authenticated && !solanaWallet) {
+    if (hasEvmWallet || caughtEvmConflict) {
+      return (
+        <div className="login-container">
+          <div className="login-card">
+            <div className="network-badge">
+              <div className="badge-dot" style={{ background: '#EF4444', boxShadow: '0 0 10px #EF4444' }} />
+              <span style={{ color: '#EF4444' }}>EVM WALLET CONFLICT</span>
+            </div>
+
+            <div className="login-hero">
+              <div className="title-wrap" style={{ fontSize: '1.5rem', marginBottom: '16px' }}>
+                <span className="title-light">Action</span>
+                <span className="title-accent">&nbsp;Required</span>
+              </div>
+              <p className="login-body" style={{ color: '#EF4444', fontWeight: 600, fontSize: '0.8rem', padding: '10px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px' }}>
+                User already has an embedded EVM wallet.
+              </p>
+              <p className="login-body" style={{ marginTop: '16px' }}>
+                Your Google account is already linked to an Ethereum embedded wallet in Privy. Privy does not currently allow automatically creating a second embedded wallet for Solana on the same account.
+              </p>
+              <p className="login-body" style={{ fontSize: '0.8rem' }}>
+                Please connect an external Solana wallet (like Phantom) to continue, or logout and use a completely new email address.
+              </p>
+            </div>
+
+            <div className="login-bottom">
+              <button className="login-btn" onClick={() => connectWallet()}>
+                <Wallet size={20} />
+                Connect Phantom / Solflare
+              </button>
+              <button className="logout-btn" onClick={logout} style={{ width: '100%', justifyContent: 'center' }}>
+                <LogOut size={16} /> Logout & Try New Account
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div className="login-container">
+          <div className="login-card">
+            <div className="network-badge">
+              <div className="badge-dot" style={{ background: '#10B981', boxShadow: '0 0 10px #10B981' }} />
+              <span style={{ color: '#10B981' }}>INITIALIZING PROTOCOL</span>
+            </div>
+            <div className="login-hero">
+              <Loader2 size={48} className="animate-spin" style={{ margin: '0 auto', color: '#6D28D9' }} />
+              <p className="login-body" style={{ marginTop: '24px', textAlign: 'center' }}>
+                Generating secure Zero-Knowledge Solana Wallet...
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   const usd = solPriceUsd > 0 ? (balance * solPriceUsd).toFixed(2) : '—';
@@ -196,7 +274,9 @@ function App() {
       {/* Header */}
       <header className="app-header">
         <div className="logo-area">
-          <img src="/assets/sentinel_hero.png" alt="Eject.fi" className="header-logo" />
+          <div className="header-logo-bg">
+            <Shield size={20} color="#8B5CF6" />
+          </div>
           <span className="logo-text">Eject.fi</span>
         </div>
         <div className="header-right">
@@ -210,178 +290,201 @@ function App() {
           )}
           <button className="logout-btn" onClick={logout}>
             <LogOut size={14} />
-            <span>Disconnect</span>
+            <span>EXIT</span>
           </button>
         </div>
       </header>
 
-      <div className="scroll-content">
-        {/* System Status Bar */}
-        <div className="system-status-bar">
-          <div className="status-badge" style={{ borderColor: `${sentinelColor}33` }}>
-            <div className="status-dot-live" style={{ backgroundColor: sentinelColor }} />
-            <span style={{ color: sentinelColor }}>
-              Sentinel: {systemHealth.dataSource === 'live' ? 'LIVE' : 'SYNC'}
-              {systemHealth.networkTps > 0 ? ` · ${Math.round(systemHealth.networkTps)} TPS` : ''}
-            </span>
-          </div>
-          <div className="risk-badge" style={{ 
-            borderColor: `${riskColor}33`, 
-            background: `${riskColor}0D` 
-          }}>
-            <span style={{ color: riskColor }}>Risk: {systemHealth.riskLevel}</span>
-          </div>
-        </div>
-
-        {/* Vault Hero */}
-        <div className="vault-hero">
-          <div className="vault-label">Portfolio Value</div>
-          <div className="vault-usd">${usd}</div>
-          <div className="sol-row">
-            <span className="sol-value">{balance.toFixed(4)} SOL</span>
-            {solPriceUsd > 0 && (
-              <div className="change-badge" style={{
-                background: priceDelta >= 0 ? 'var(--accent-green-dim)' : 'var(--accent-red-dim)',
+      <div className="main-layout">
+        {/* Left Panel: Stats & Controls */}
+        <div className="dashboard-panel">
+          <div className="panel-content">
+            {/* System Status Bar */}
+            <div className="system-status-bar">
+              <div className="status-badge" style={{ borderColor: `${sentinelColor}33` }}>
+                <div className="status-dot-live" style={{ backgroundColor: sentinelColor }} />
+                <span style={{ color: sentinelColor }}>
+                  Sentinel: {systemHealth.dataSource === 'live' ? 'LIVE' : 'SYNC'}
+                  {systemHealth.networkTps > 0 ? ` · ${Math.round(systemHealth.networkTps)} TPS` : ''}
+                </span>
+              </div>
+              <div className="risk-badge" style={{ 
+                borderColor: `${riskColor}33`, 
+                background: `${riskColor}0D` 
               }}>
-                <TrendingUp size={10} style={{ color: priceDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }} />
-                <span style={{ color: priceDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{priceChangeStr}</span>
+                <span style={{ color: riskColor }}>Risk: {systemHealth.riskLevel}</span>
               </div>
-            )}
-          </div>
-
-          <div className="vault-divider" />
-
-          {/* Quick Action Buttons — Deposit / Withdraw / Send / Vault */}
-          <div className="wallet-actions">
-            <button className="wallet-action-btn deposit" onClick={() => handleChipAction('deposit', 0.1 as any)} disabled={isTyping}>
-              <ArrowDownToLine size={16} />
-              <span>Deposit</span>
-            </button>
-            <button className="wallet-action-btn withdraw" onClick={() => handleChipAction('withdraw', 0.05 as any)} disabled={isTyping}>
-              <ArrowUpFromLine size={16} />
-              <span>Withdraw</span>
-            </button>
-            <button className="wallet-action-btn send" onClick={() => sendMessage('vault status')} disabled={isTyping}>
-              <Vault size={16} />
-              <span>Vault</span>
-            </button>
-          </div>
-
-          <div className="vault-divider" />
-
-          {/* Status Row */}
-          <div className="status-row">
-            <div className="status-item">
-              <Shield size={16} color="#10B981" />
-              <span className="status-item-label">Vault</span>
-              <span className="status-item-value" style={{ color: '#10B981' }}>Secured</span>
             </div>
-            <div className="status-row-divider" />
-            <div className="status-item">
-              <Cpu size={16} color="#3B82F6" />
-              <span className="status-item-label">Swarm</span>
-              <span className="status-item-value" style={{ color: '#3B82F6' }}>{swarmCount} Active</span>
+
+            {/* Vault Hero */}
+            <div className="vault-hero">
+              <div className="vault-label">Portfolio Value</div>
+              <div className="vault-usd">${usd}</div>
+              <div className="sol-row">
+                <span className="sol-value">{balance.toFixed(4)} SOL</span>
+                {solPriceUsd > 0 && (
+                  <div className="change-badge" style={{
+                    background: priceDelta >= 0 ? 'var(--accent-green-dim)' : 'var(--accent-red-dim)',
+                  }}>
+                    {priceDelta >= 0 ? <TrendingUp size={10} color="#10B981" /> : <ShieldAlert size={10} color="#EF4444" />}
+                    <span style={{ color: priceDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{priceChangeStr}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="vault-divider" />
+
+              {/* Quick Action Buttons */}
+              <div className="wallet-actions">
+                <button className="wallet-action-btn deposit" onClick={() => handleChipAction('deposit', 0.1 as any)} disabled={isTyping}>
+                  <ArrowDownToLine size={20} />
+                  <span>Deposit</span>
+                </button>
+                <button className="wallet-action-btn withdraw" onClick={() => handleChipAction('withdraw', 0.05 as any)} disabled={isTyping}>
+                  <ArrowUpFromLine size={20} />
+                  <span>Withdraw</span>
+                </button>
+                <button className="wallet-action-btn vault" onClick={() => sendMessage('vault status')} disabled={isTyping}>
+                  <Vault size={20} />
+                  <span>Vault</span>
+                </button>
+              </div>
+
+              <div className="vault-divider" />
+
+              {/* Status Row */}
+              <div className="status-row">
+                <div className="status-item">
+                  <Shield size={16} color="#10B981" />
+                  <span className="status-item-label">Security</span>
+                  <span className="status-item-value" style={{ color: '#10B981' }}>Active</span>
+                </div>
+                <div className="status-row-divider" />
+                <div className="status-item">
+                  <Cpu size={16} color="#3B82F6" />
+                  <span className="status-item-label">Swarm</span>
+                  <span className="status-item-value" style={{ color: '#3B82F6' }}>{swarmCount} Active</span>
+                </div>
+                <div className="status-row-divider" />
+                <div className="status-item">
+                  <Activity size={16} color={riskColor} />
+                  <span className="status-item-label">Health</span>
+                  <span className="status-item-value" style={{ color: riskColor }}>Optimal</span>
+                </div>
+              </div>
             </div>
-            <div className="status-row-divider" />
-            <div className="status-item">
-              <Activity size={16} color={riskColor} />
-              <span className="status-item-label">Risk</span>
-              <span className="status-item-value" style={{ color: riskColor }}>{systemHealth.riskLevel}</span>
+
+            {/* Action Grid */}
+            <div className="action-section">
+              <div className="section-header">
+                <Fingerprint size={14} />
+                <span>INTELLIGENCE GRID</span>
+              </div>
+              <div className="action-grid-2x2">
+                <button className="bento-card" onClick={() => handleChipAction('deep_scan')} disabled={isTyping}>
+                  <div className="bento-icon" style={{ background: 'rgba(139,92,246,0.12)' }}>
+                    <BarChart3 size={18} color="#8B5CF6" />
+                  </div>
+                  <span className="bento-title">Deep Scan</span>
+                  <span className="bento-sub">Check protocol risk (x402)</span>
+                </button>
+
+                <button className="bento-card" onClick={() => handleChipAction('simulate_deposit')} disabled={isTyping}>
+                  <div className="bento-icon" style={{ background: 'rgba(59,130,246,0.12)' }}>
+                    <Route size={18} color="#3B82F6" />
+                  </div>
+                  <span className="bento-title">Safe Haven</span>
+                  <span className="bento-sub">Powered by LI.FI</span>
+                </button>
+
+                <button className="bento-card" onClick={() => handleChipAction('enable_autopilot')} disabled={isTyping}>
+                  <div className="bento-icon" style={{ background: 'rgba(245,158,11,0.12)' }}>
+                    <Zap size={18} color="#F59E0B" />
+                  </div>
+                  <span className="bento-title">Autopilot</span>
+                  <span className="bento-sub">Jupiter yield swap</span>
+                </button>
+
+                <button className="bento-card" onClick={() => sendMessage('swarm status')} disabled={isTyping}>
+                  <div className="bento-icon" style={{ background: 'rgba(16,185,129,0.12)' }}>
+                    <Wifi size={18} color="#10B981" />
+                  </div>
+                  <span className="bento-title">Swarm</span>
+                  <span className="bento-sub">{swarmCount} agents live</span>
+                </button>
+              </div>
+
+              {/* Emergency Eject */}
+              <button className="eject-card" onClick={executeBridge} disabled={isTyping}>
+                <div className="eject-inner">
+                  <div className="bento-icon eject-icon-bg">
+                    <ShieldAlert size={20} color="#EF4444" />
+                  </div>
+                  <div className="eject-text">
+                    <span className="eject-title">EMERGENCY ZK-EJECT</span>
+                    <span className="eject-sub">Withdraw everything to Base via LI.FI</span>
+                  </div>
+                  <ChevronRight size={18} color="#EF4444" opacity={0.5} />
+                </div>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Action Grid — 2x2 + Full-width Eject */}
-        <div className="action-section">
-          <div className="action-grid-2x2">
-            <button className="bento-card" onClick={() => handleChipAction('deep_scan')} disabled={isTyping}>
-              <div className="bento-icon" style={{ background: 'rgba(139,92,246,0.12)' }}>
-                <BarChart3 size={18} color="#8B5CF6" />
+        {/* Right Panel: Agent Console */}
+        <div className="console-panel">
+          <div className="console-container">
+            <div className="console-header">
+              <div className="console-header-left">
+                <Terminal size={14} />
+                <span>SENTINEL COMMAND DECK</span>
               </div>
-              <span className="bento-title">Risk Scan</span>
-              <span className="bento-sub">Predict threats</span>
-            </button>
+              <div className="console-header-right" style={{ color: sentinelColor }}>
+                <div className="console-dot" style={{ backgroundColor: sentinelColor }} />
+                <span>CONNECTED</span>
+              </div>
+            </div>
+            
+            <div className="console-body">
+              {messages.map((m) => (
+                <div key={m.id} className={`console-msg ${m.sender}`}>
+                  <span className="console-prompt">{m.sender === 'user' ? '❯' : '●'}</span>
+                  <pre>{m.text}</pre>
+                </div>
+              ))}
+              {isTyping && (
+                <div className="console-msg agent">
+                  <span className="console-prompt">●</span>
+                  <pre className="cursor-blink">_</pre>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
 
-            <button className="bento-card" onClick={() => handleChipAction('enable_autopilot')} disabled={isTyping}>
-              <div className="bento-icon" style={{ background: 'rgba(245,158,11,0.12)' }}>
-                <Zap size={18} color="#F59E0B" />
-              </div>
-              <span className="bento-title">Autopilot</span>
-              <span className="bento-sub">Max yield route</span>
-            </button>
-
-            <button className="bento-card" onClick={() => handleChipAction('simulate_deposit')} disabled={isTyping}>
-              <div className="bento-icon" style={{ background: 'rgba(59,130,246,0.12)' }}>
-                <Route size={18} color="#3B82F6" />
-              </div>
-              <span className="bento-title">Safe Haven</span>
-              <span className="bento-sub">Powered by LI.FI</span>
-            </button>
-
-            <button className="bento-card" onClick={() => handleChipAction('deep_scan')} disabled={isTyping}>
-              <div className="bento-icon" style={{ background: 'rgba(16,185,129,0.12)' }}>
-                <Wifi size={18} color="#10B981" />
-              </div>
-              <span className="bento-title">Swarm</span>
-              <span className="bento-sub">{swarmCount} agents live</span>
-            </button>
+            <form className="console-input" onSubmit={handleSend}>
+              <input 
+                type="text" 
+                placeholder={solanaAddress ? "Type a command..." : "Connecting..."}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                disabled={isTyping || !solanaAddress}
+              />
+              <button type="submit" disabled={isTyping || !inputText.trim() || !solanaAddress}>
+                <Send size={16} />
+              </button>
+            </form>
           </div>
-
-          {/* Emergency Eject — Full Width */}
-          <button className="eject-card" onClick={executeBridge} disabled={isTyping}>
-            <div className="eject-inner">
-              <div className="bento-icon eject-icon-bg">
-                <LogOut size={18} color="#EF4444" />
-              </div>
-              <div className="eject-text">
-                <span className="eject-title">Emergency ZK-Eject</span>
-                <span className="eject-sub">Private withdrawal · Zero market impact</span>
-              </div>
-              <ChevronRight size={16} color="#64748B" />
+          
+          <div className="console-footer">
+            <div className="footer-item">
+              <Lock size={12} />
+              <span>Devnet Environment</span>
             </div>
-          </button>
-        </div>
-
-        {/* Agent Console — Terminal */}
-        <div className="console-container">
-          <div className="console-header">
-            <div className="console-header-left">
-              <Terminal size={13} color="#64748B" />
-              <span>Sentinel Console</span>
-            </div>
-            <div className="console-header-right">
-              <div className="console-dot" style={{ backgroundColor: isTyping ? '#F59E0B' : '#10B981' }} />
-              <span style={{ color: isTyping ? '#F59E0B' : '#10B981' }}>
-                {isTyping ? 'Analyzing' : 'Online'}
-              </span>
+            <div className="footer-item">
+              <ArrowRightLeft size={12} />
+              <span>ZK-Engine: Active</span>
             </div>
           </div>
-          <div className="console-body">
-            {messages.map((msg) => (
-              <div key={msg.id} className={`console-msg ${msg.sender}`}>
-                <span className="console-prompt">{msg.sender === 'agent' ? '→ ' : '$ '}</span>
-                <pre>{msg.text}</pre>
-              </div>
-            ))}
-            {isTyping && (
-              <div className="console-msg agent">
-                <span className="console-prompt">→ </span>
-                <pre className="cursor-blink">▊</pre>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-          <form className="console-input" onSubmit={handleSend}>
-            <input 
-              type="text" 
-              placeholder="Command the Sentinel..." 
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-            />
-            <button type="submit" disabled={!inputText.trim() || isTyping}>
-              <Send size={14} />
-            </button>
-          </form>
         </div>
       </div>
     </div>

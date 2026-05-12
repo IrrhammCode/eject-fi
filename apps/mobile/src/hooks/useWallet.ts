@@ -3,17 +3,33 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { PublicKey, Transaction, Connection, clusterApiUrl, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { usePrivy, useLoginWithOAuth, useEmbeddedSolanaWallet, isConnected } from '@privy-io/expo';
+import { usePrivy, useLoginWithOAuth, useEmbeddedSolanaWallet } from '@privy-io/expo';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { WalletState } from '../types';
 
 const SOLANA_RPC = process.env.EXPO_PUBLIC_SOLANA_RPC || 'https://devnet.helius-rpc.com/?api-key=25670c4c-3555-4582-b560-69be4f754491';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
 
 export function useWallet() {
-  const { user, isReady, logout } = usePrivy();
-  const { login } = useLoginWithOAuth();
+  const privy = usePrivy();
   const solanaWallet = useEmbeddedSolanaWallet();
   
+  // Ambil data dengan lebih aman
+  const user = privy.user;
+  const isReady = privy.ready !== undefined ? privy.ready : true; // Fallback jika undefined
+  const authenticated = privy.authenticated !== undefined ? privy.authenticated : !!user;
+
+  // Diagnostic logs — hanya saat status berubah
+  useEffect(() => {
+    if (isReady) {
+      console.log('[WALLET-DEBUG] Status Update:', {
+        authenticated,
+        hasUser: !!user,
+        wallets: solanaWallet.wallets?.length || 0
+      });
+    }
+  }, [isReady, authenticated, !!user, solanaWallet.wallets?.length]);
+
   const [wallet, setWallet] = useState<WalletState>({
     connected: false,
     publicKey: null,
@@ -32,83 +48,106 @@ export function useWallet() {
   }, []);
 
   const refreshBalance = useCallback(async () => {
-    if (!wallet.publicKey) return;
-    const balance = await fetchBalance(wallet.publicKey);
-    if (balance !== null) {
-      setWallet(prev => ({ ...prev, balance }));
+    if (wallet.publicKey) {
+      const balance = await fetchBalance(wallet.publicKey);
+      if (balance !== null) setWallet(prev => ({ ...prev, balance }));
     }
   }, [wallet.publicKey, fetchBalance]);
 
+  // Efek untuk sinkronisasi state dompet
   useEffect(() => {
-    if (!isReady) return;
-    const currentWallet = solanaWallet as any;
-    let walletAddress = currentWallet?.wallets?.[0]?.address || currentWallet?.publicKey;
-
-    if (!walletAddress && user?.linkedAccounts) {
-      const solanaAccount = user.linkedAccounts.find((a: any) => a.chainType === 'solana');
-      if (solanaAccount) walletAddress = solanaAccount.address;
+    const embeddedWallet = solanaWallet.wallets?.[0];
+    const walletAddress = embeddedWallet?.address || (user?.linked_accounts?.find((a: any) => a.chainType === 'solana') as any)?.address;
+    
+    if (walletAddress && walletAddress !== wallet.publicKey) {
+      console.log('[Wallet] Auto-connecting to address:', walletAddress);
+      setWallet(prev => ({ 
+        ...prev, 
+        connected: true, 
+        publicKey: walletAddress, 
+        connecting: false 
+      }));
+      fetchBalance(walletAddress).then(b => { 
+        if (b !== null) setWallet(prev => ({ ...prev, balance: b })); 
+      });
     }
-
-    if (walletAddress) {
-      setWallet(prev => ({ ...prev, connected: true, publicKey: walletAddress, connecting: false }));
-      fetchBalance(walletAddress).then(b => { if (b !== null) setWallet(prev => ({ ...prev, balance: b })); });
-    }
-  }, [user, isReady, solanaWallet?.address, solanaWallet?.wallets]);
+  }, [user, solanaWallet.wallets, wallet.publicKey]);
 
   const signAndSendTransaction = useCallback(
     async (transaction: Transaction): Promise<string> => {
-      // --- DEMO OVERRIDE LOGIC ---
-      // If things take too long (timeout), we simulate success for the judges.
-      return new Promise(async (resolve, reject) => {
-        const timeout = setTimeout(() => {
-          console.warn('[Demo] Real chain timed out. Switching to Simulated Success...');
-          // Simulate balance decrease
-          setWallet(prev => ({ ...prev, balance: (prev.balance || 5) - 0.05 }));
-          resolve('SIMULATED_SUCCESS_SIGNATURE_' + Math.random().toString(36).substring(7));
-        }, 8000); // 8 seconds timeout for Face ID + Network
+      const activeWallet = solanaWallet.wallets?.[0];
+      if (!activeWallet) throw new Error('No embedded wallet found');
 
-        try {
-          if (!wallet.publicKey) throw new Error('Not connected');
-          const currentSolanaWallet = solanaWallet as any;
-          const activeWallet = currentSolanaWallet?.wallets?.[0] || currentSolanaWallet;
-          const provider = await activeWallet.getProvider();
-          
-          const { blockhash } = await connection.getLatestBlockhash('confirmed');
-          transaction.recentBlockhash = blockhash;
-          transaction.feePayer = new PublicKey(wallet.publicKey);
+      console.log('[Wallet] Starting signAndSendTransaction process...');
+      
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = new PublicKey(wallet.publicKey!);
 
-          let signedTx;
-          if (typeof provider.signTransaction === 'function') {
-            signedTx = await provider.signTransaction(transaction);
-          } else {
-            signedTx = await provider.request({ method: 'signTransaction', params: { transaction } });
-          }
-
-          const signature = await connection.sendRawTransaction(signedTx.serialize ? signedTx.serialize() : signedTx);
-          await connection.confirmTransaction(signature, 'confirmed');
-          
-          clearTimeout(timeout);
-          refreshBalance();
-          resolve(signature);
-        } catch (error) {
-          clearTimeout(timeout);
-          console.error('[Wallet] Real signing failed:', error);
-          reject(error);
-        }
-      });
+      try {
+        const provider = await activeWallet.getProvider();
+        console.log('[Wallet] Triggering signAndSendTransaction with UI Options...');
+        
+        const response = await provider.request({
+          method: 'signAndSendTransaction',
+          params: {
+            transaction,
+            connection,
+            uiOptions: {
+              showWalletUIs: true,
+            }
+          },
+        });
+        
+        console.log('[Wallet] SUCCESS! Signature:', response.signature);
+        refreshBalance();
+        return response.signature;
+      } catch (error: any) {
+        console.error('[Wallet] Error during signing:', error);
+        throw error;
+      }
     },
-    [wallet.publicKey, solanaWallet, refreshBalance]
+    [wallet.publicKey, solanaWallet.wallets, refreshBalance]
   );
+
+  const signMessage = useCallback(async (message: string): Promise<string> => {
+    const activeWallet = solanaWallet.wallets?.[0];
+    if (!activeWallet) throw new Error('No wallet');
+    
+    console.log('[Wallet] Triggering signMessage...');
+    const provider = await activeWallet.getProvider();
+    const response = await provider.request({
+      method: 'signMessage',
+      params: {
+        message: message,
+        uiOptions: {
+          showWalletUIs: true,
+        }
+      },
+    });
+    return response.signature;
+  }, [solanaWallet.wallets]);
+
+  const { login: loginWithOAuth } = useLoginWithOAuth();
 
   const connect = useCallback(async () => {
     setWallet(prev => ({ ...prev, connecting: true }));
-    try { await login({ provider: 'google' }); } catch (e) { setWallet(prev => ({ ...prev, connecting: false })); }
-  }, [login]);
+    try { 
+      console.log('[Wallet] Cleaning up old sessions...');
+      try { await privy.logout(); } catch (e) {} // Force clear
+      
+      console.log('[Wallet] Initiating fresh Google Login...');
+      await loginWithOAuth({ provider: 'google' }); 
+    } catch (e: any) { 
+      console.error('[Wallet] Login failed:', e);
+      setWallet(prev => ({ ...prev, connecting: false })); 
+    }
+  }, [loginWithOAuth, privy]);
 
   const disconnect = useCallback(async () => {
-    try { await logout(); } catch (e) {}
+    try { await privy.logout(); } catch (e) {}
     setWallet({ connected: false, publicKey: null, balance: null, connecting: false });
-  }, [logout]);
+  }, [privy]);
 
-  return { wallet, connect, disconnect, signAndSendTransaction, refreshBalance };
+  return { wallet, connect, disconnect, signAndSendTransaction, refreshBalance, authenticated, signMessage };
 }

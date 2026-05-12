@@ -2,11 +2,12 @@
 
 :root {
   --bg-color: #050508;
+  --bg-main: #050508;
   --panel-bg: rgba(255, 255, 255, 0.03);
   --panel-bg-solid: #0C0D12;
   --text-main: #E2E8F0;
   --text-muted: #64748B;
-  --text-dim: #475569;
+  --text-dim: #94A3B8;
   --accent-violet: #8B5CF6;
   --accent-violet-dim: rgba(139, 92, 246, 0.15);
   --accent-green: #10B981;
@@ -17,7 +18,8 @@
   --accent-blue-dim: rgba(59, 130, 246, 0.12);
   --accent-amber: #F59E0B;
   --accent-amber-dim: rgba(245, 158, 11, 0.12);
-  --border-color: rgba(255, 255, 255, 0.06);
+  --accent-gold: #F59E0B;
+  --border-color: rgba(255, 255, 255, 0.08);
   --border-glow: rgba(139, 92, 246, 0.2);
   --shadow-violet: 0 0 80px rgba(139, 92, 246, 0.08);
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -35,9 +37,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #000;
   color: var(--text-main);
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-height: 100vh;
   overflow: hidden;
 }
@@ -66,16 +65,10 @@ body::before {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 440px;
   height: 100vh;
-  max-height: 900px;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-color);
-  border-left: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  box-shadow: var(--shadow-violet),
-              0 0 0 1px rgba(255,255,255,0.02);
   overflow: hidden;
 }
 

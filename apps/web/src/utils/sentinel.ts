@@ -206,6 +206,19 @@ export async function checkProtocolHealth(protocol: string): Promise<ProtocolHea
 }
 
 /**
+ * Simplified aggregator for dashboard stats
+ */
+export async function getHeliusStats() {
+  const health = await checkProtocolHealth('Kamino');
+  return {
+    solPrice: health.solPrice,
+    tps: health.networkTps,
+    riskLevel: health.riskLevel,
+    dataSource: health.dataSource
+  };
+}
+
+/**
  * Fetches just the SOL price (used by VaultHero for portfolio valuation)
  */
 export async function getSolPrice(): Promise<number> {

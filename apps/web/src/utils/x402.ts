@@ -17,9 +17,6 @@ import { Buffer } from 'buffer';
 const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC || 'https://api.devnet.solana.com';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
 
-// The "Treasury" address of the Sentinel AI Swarm
-export const SENTINEL_AI_TREASURY = new PublicKey('11111111111111111111111111111111'); // Burn address or treasury
-
 // Tiered pricing for different service levels
 const SERVICE_PRICING: Record<string, number> = {
   'BASIC_SCAN': 0.001,
@@ -46,13 +43,14 @@ export interface X402PaymentResult {
 /**
  * Generates a deterministic x402 invoice — no simulated delay.
  * The invoice amount is based on the service tier requested.
+ * Treasury is passed in dynamically (e.g. user's Vault PDA).
  */
-export const requestAgentAccess = (serviceName: string): x402Invoice => {
+export const requestAgentAccess = (serviceName: string, treasury: PublicKey): x402Invoice => {
   const amount = SERVICE_PRICING[serviceName] || SERVICE_PRICING['PREMIUM'];
   return {
     amountSol: amount,
     serviceRef: `x402:${serviceName}:${Date.now()}`,
-    treasury: SENTINEL_AI_TREASURY,
+    treasury,
   };
 };
 
@@ -69,10 +67,11 @@ export const buildx402Transaction = (
   );
   
   // Tag with Memo Program for agent verification
+  // Using TextEncoder for native browser compatibility
   transaction.add(
     new TransactionInstruction({
       keys: [{ pubkey: userPubkey, isSigner: true, isWritable: true }],
-      data: Buffer.from(invoice.serviceRef, 'utf-8'),
+      data: Buffer.from(new TextEncoder().encode(invoice.serviceRef)),
       programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
     })
   );
@@ -114,16 +113,24 @@ export const verifyx402Proof = async (
   }
 };
 
+/**
+ * Executes the full x402 payment flow.
+ * Treasury address is passed dynamically — on Devnet this is the user's Vault PDA.
+ */
 export const executeX402Payment = async (
   userPubkeyStr: string,
   signAndSend: (tx: any) => Promise<string>,
-  serviceTier: string = 'PREMIUM'
+  serviceTier: string = 'PREMIUM',
+  treasuryAddress?: PublicKey
 ): Promise<X402PaymentResult> => {
   try {
     const userPubkey = new PublicKey(userPubkeyStr);
     
+    // Use provided treasury or default to user's own address (self-payment for Devnet demo)
+    const treasury = treasuryAddress || userPubkey;
+    
     // 1. Generate deterministic invoice (no delay)
-    const invoice = requestAgentAccess(serviceTier);
+    const invoice = requestAgentAccess(serviceTier, treasury);
     
     // 2. Build Transaction
     const tx = buildx402Transaction(userPubkey, invoice);

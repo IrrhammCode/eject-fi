@@ -16,6 +16,7 @@ import { Header } from '../components/Header';
 import { VaultHero } from '../components/VaultHero';
 import { ActionGrid } from '../components/ActionGrid';
 import { AgentConsole } from '../components/AgentConsole';
+import { ChatInput } from '../components/ChatInput';
 
 interface ChatScreenProps {
   wallet: WalletState;
@@ -28,10 +29,12 @@ export function ChatScreen({
   wallet,
   onDisconnect,
   signAndSendTransaction,
+  refreshBalance,
 }: ChatScreenProps) {
-  const { messages, isProcessing, handleChipAction, executeBridge } = useChat(
+  const { messages, isProcessing, handleChipAction, executeBridge, sendMessage } = useChat(
     wallet,
-    signAndSendTransaction
+    signAndSendTransaction,
+    refreshBalance
   );
 
   // --- Live System Status ---
@@ -85,7 +88,7 @@ export function ChatScreen({
   const latestAgentMessage = [...messages].reverse().find(m => m.role === 'agent');
 
   // Dynamic colors based on live risk level
-  const riskColor = systemHealth.riskLevel === 'CRITICAL' ? COLORS.accent.red
+  const riskColor = systemHealth.riskLevel === 'CRITICAL' ? COLORS.danger.primary
     : systemHealth.riskLevel === 'HIGH' ? '#FF9500'
     : systemHealth.riskLevel === 'MEDIUM' ? '#FFD60A'
     : COLORS.accent.green;
@@ -131,7 +134,12 @@ export function ChatScreen({
         </View>
 
         {/* Massive Balance & Assurance */}
-        <VaultHero balance={wallet.balance} solPriceUsd={solPriceUsd} />
+        <VaultHero 
+          balance={wallet.balance} 
+          solPriceUsd={solPriceUsd} 
+          onAction={handleChipAction}
+          disabled={isProcessing}
+        />
 
         {/* Bento Box Control Center */}
         <ActionGrid 
@@ -146,6 +154,9 @@ export function ChatScreen({
           onExecuteBridge={executeBridge}
         />
       </ScrollView>
+
+      {/* Unified Input System — Mirroring Web terminal input */}
+      <ChatInput onSend={sendMessage} disabled={isProcessing} />
     </View>
   );
 }

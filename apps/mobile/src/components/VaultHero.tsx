@@ -5,18 +5,18 @@
  * Revolut (change indicator), Apple Wallet (clean hierarchy)
  */
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 
 interface VaultHeroProps {
   balance: number | null;
   solPriceUsd: number;
+  onAction: (action: any) => void;
+  disabled?: boolean;
 }
 
-
-
-export function VaultHero({ balance, solPriceUsd }: VaultHeroProps) {
+export function VaultHero({ balance, solPriceUsd, onAction, disabled }: VaultHeroProps) {
   const sol = balance ?? 0;
   const usd = solPriceUsd > 0 ? (sol * solPriceUsd).toFixed(2) : '—';
 
@@ -32,6 +32,34 @@ export function VaultHero({ balance, solPriceUsd }: VaultHeroProps) {
           <Ionicons name="trending-up" size={10} color={COLORS.accent.green} />
           <Text style={styles.changeText}>+2.4%</Text>
         </View>
+      </View>
+
+      {/* Action Buttons — Unified with Web */}
+      <View style={styles.actionRow}>
+        <ActionButton 
+          icon="add-circle-outline" 
+          label="Deposit" 
+          onPress={() => onAction('deposit')}
+          disabled={disabled}
+        />
+        <ActionButton 
+          icon="remove-circle-outline" 
+          label="Withdraw" 
+          onPress={() => onAction('withdraw')}
+          disabled={disabled}
+        />
+        <ActionButton 
+          icon="shield-outline" 
+          label="Vault" 
+          onPress={() => onAction('vault_status')}
+          disabled={disabled}
+        />
+        <ActionButton 
+          icon="send-outline" 
+          label="Transfer" 
+          onPress={() => onAction('transfer')}
+          disabled={disabled}
+        />
       </View>
 
       {/* Divider */}
@@ -61,6 +89,24 @@ export function VaultHero({ balance, solPriceUsd }: VaultHeroProps) {
         />
       </View>
     </View>
+  );
+}
+
+function ActionButton({ icon, label, onPress, disabled }: {
+  icon: any; label: string; onPress: () => void; disabled?: boolean;
+}) {
+  return (
+    <TouchableOpacity 
+      style={[styles.actionBtn, disabled && { opacity: 0.5 }]} 
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.7}
+    >
+      <View style={styles.actionIconWrap}>
+        <Ionicons name={icon} size={20} color={COLORS.text.primary} />
+      </View>
+      <Text style={styles.actionLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -118,6 +164,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: COLORS.accent.green,
+  },
+
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: SPACING.xl,
+    paddingHorizontal: 4,
+  },
+  actionBtn: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.bg.tertiary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border.subtle,
+  },
+  actionLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.text.secondary,
   },
 
   divider: {

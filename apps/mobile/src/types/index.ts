@@ -24,7 +24,7 @@ export interface WalletState {
   connecting: boolean;
 }
 
-export type ChipAction = 'simulate_deposit' | 'check_oracle' | 'confirm_eject' | 'stealth_eject' | 'enable_autopilot';
+export type ChipAction = 'simulate_deposit' | 'check_oracle' | 'confirm_eject' | 'stealth_eject' | 'enable_autopilot' | 'deposit' | 'withdraw' | 'transfer' | 'vault_status';
 
 export interface SuggestionChip {
   id: ChipAction;

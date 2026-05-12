@@ -9,6 +9,7 @@
  *  - Solana Program (real PDA interactions for Vault, Deposit, Withdraw, Transfer)
  */
 import { useState } from 'react';
+import { Alert } from 'react-native';
 import { ChatMessage, ChipAction, WalletState } from '../types';
 import { handleEjectTransaction, isProgramDeployed, buildDepositOnlyTx, buildWithdrawTx, buildTransferTx, getVaultBalance, findSolVaultAddress, addMockVaultBalance, clearMockVaultBalance, updateMockWalletBalance } from '../utils/solana';
 import { checkProtocolHealth, ProtocolHealth } from '../utils/sentinel';
@@ -260,7 +261,24 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
         }
 
         case 'deposit': {
-          const amount = payload || 0.1;
+          if (payload === undefined || payload === null) {
+            Alert.prompt(
+              "Deposit to Vault",
+              "Berapa SOL yang ingin Anda depositkan?",
+              [
+                { text: "Batal", style: "cancel" },
+                { text: "Deposit", onPress: (val) => handleChipAction('deposit', parseFloat(val || '0.5')) }
+              ],
+              'plain-text',
+              '0.5',
+              'decimal-pad'
+            );
+            return;
+          }
+
+          const amount = typeof payload === 'string' ? parseFloat(payload) : (payload || 0.1);
+          if (isNaN(amount) || amount <= 0) return;
+
           addMessage('user', `Deposit ${amount} SOL to Sentinel Vault`);
 
           if ((wallet.balance || 0) < amount) {
@@ -273,8 +291,9 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
           const depositTx = await buildDepositOnlyTx(new PublicKey(wallet.publicKey), amount);
           const depositSig = await signAndSendTransaction(depositTx);
 
-          // DEMO: Tambahkan saldo ke vault mock
+          // DEMO: Tambahkan saldo ke vault mock dan kurangi dari dompet
           addMockVaultBalance(amount);
+          updateMockWalletBalance(-amount);
 
           const vaultBal = await getVaultBalance(new PublicKey(wallet.publicKey));
           addMessage('agent',
@@ -290,7 +309,24 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
         }
 
         case 'withdraw': {
-          const wAmount = payload || 0.1;
+          if (payload === undefined || payload === null) {
+            Alert.prompt(
+              "Withdraw from Vault",
+              "Berapa SOL yang ingin ditarik ke dompet?",
+              [
+                { text: "Batal", style: "cancel" },
+                { text: "Tarik", onPress: (val) => handleChipAction('withdraw', parseFloat(val || '0.5')) }
+              ],
+              'plain-text',
+              '0.5',
+              'decimal-pad'
+            );
+            return;
+          }
+
+          const wAmount = typeof payload === 'string' ? parseFloat(payload) : (payload || 0.1);
+          if (isNaN(wAmount) || wAmount <= 0) return;
+
           addMessage('user', `Withdraw ${wAmount} SOL from Sentinel Vault`);
 
           const vaultBalBefore = await getVaultBalance(new PublicKey(wallet.publicKey));
@@ -307,8 +343,9 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
             );
             const withdrawSig = await signAndSendTransaction(withdrawTx);
 
-            // DEMO: Kurangi saldo vault
+            // DEMO: Kurangi saldo vault dan kembalikan ke dompet utama
             addMockVaultBalance(-wAmount);
+            updateMockWalletBalance(wAmount);
             const newBal = await getVaultBalance(new PublicKey(wallet.publicKey));
 
             addMessage('agent',
@@ -327,6 +364,21 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
         }
 
         case 'transfer': {
+          if (!payload) {
+            Alert.prompt(
+              "Transfer ke Favorit",
+              "Berapa SOL yang ingin ditransfer ke Alice?",
+              [
+                { text: "Batal", style: "cancel" },
+                { text: "Kirim", onPress: (val) => handleChipAction('transfer', { amount: parseFloat(val || '0.5'), to: 'Alice (Favorite Contact)' }) }
+              ],
+              'plain-text',
+              '0.5',
+              'decimal-pad'
+            );
+            return;
+          }
+
           let tAmount = 0.01;
           let tTo = 'Alice (Favorite Contact)';
           try {

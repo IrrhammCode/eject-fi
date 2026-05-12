@@ -264,9 +264,9 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
           if (payload === undefined || payload === null) {
             Alert.prompt(
               "Deposit to Vault",
-              "Berapa SOL yang ingin Anda depositkan?",
+              "How much SOL do you want to deposit?",
               [
-                { text: "Batal", style: "cancel" },
+                { text: "Cancel", style: "cancel" },
                 { text: "Deposit", onPress: (val) => handleChipAction('deposit', parseFloat(val || '0.5')) }
               ],
               'plain-text',
@@ -312,10 +312,10 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
           if (payload === undefined || payload === null) {
             Alert.prompt(
               "Withdraw from Vault",
-              "Berapa SOL yang ingin ditarik ke dompet?",
+              "How much SOL do you want to withdraw?",
               [
-                { text: "Batal", style: "cancel" },
-                { text: "Tarik", onPress: (val) => handleChipAction('withdraw', parseFloat(val || '0.5')) }
+                { text: "Cancel", style: "cancel" },
+                { text: "Withdraw", onPress: (val) => handleChipAction('withdraw', parseFloat(val || '0.5')) }
               ],
               'plain-text',
               '0.5',
@@ -366,11 +366,11 @@ export function useChat(wallet: WalletState, signAndSendTransaction: (tx: any) =
         case 'transfer': {
           if (!payload) {
             Alert.prompt(
-              "Transfer ke Favorit",
-              "Berapa SOL yang ingin ditransfer ke Alice?",
+              "Transfer to Favorite",
+              "How much SOL to transfer to Alice?",
               [
-                { text: "Batal", style: "cancel" },
-                { text: "Kirim", onPress: (val) => handleChipAction('transfer', { amount: parseFloat(val || '0.5'), to: 'Alice (Favorite Contact)' }) }
+                { text: "Cancel", style: "cancel" },
+                { text: "Send", onPress: (val) => handleChipAction('transfer', { amount: parseFloat(val || '0.5'), to: 'Alice (Favorite Contact)' }) }
               ],
               'plain-text',
               '0.5',

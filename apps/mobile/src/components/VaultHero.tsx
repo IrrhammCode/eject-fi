@@ -11,30 +11,60 @@ import { COLORS, SPACING, RADIUS } from '../constants/theme';
 
 interface VaultHeroProps {
   balance: number | null;
+  vaultBalance?: number | null;
   solPriceUsd: number;
   onAction: (action: any) => void;
   disabled?: boolean;
 }
 
-export function VaultHero({ balance, solPriceUsd, onAction, disabled }: VaultHeroProps) {
+export function VaultHero({ balance, vaultBalance, solPriceUsd, onAction, disabled }: VaultHeroProps) {
   const sol = balance ?? 0;
-  const usd = solPriceUsd > 0 ? (sol * solPriceUsd).toFixed(2) : '—';
+  const vault = vaultBalance ?? 0;
+  const totalSol = sol + vault;
+  const usd = solPriceUsd > 0 ? (totalSol * solPriceUsd).toFixed(2) : '—';
 
   return (
     <View style={styles.container}>
-      {/* Balance */}
+      {/* Total Portfolio */}
       <Text style={styles.usdLabel}>Portfolio Value</Text>
       <Text style={styles.usdValue}>${usd}</Text>
       
       <View style={styles.solRow}>
-        <Text style={styles.solValue}>{sol.toFixed(4)} SOL</Text>
+        <Text style={styles.solValue}>{totalSol.toFixed(4)} SOL</Text>
         <View style={styles.changeBadge}>
           <Ionicons name="trending-up" size={10} color={COLORS.accent.green} />
           <Text style={styles.changeText}>+2.4%</Text>
         </View>
       </View>
 
-      {/* Action Buttons — Unified with Web */}
+      {/* Dual Balance Cards */}
+      <View style={styles.balanceCards}>
+        {/* Wallet Balance */}
+        <View style={styles.balanceCard}>
+          <View style={styles.balanceCardHeader}>
+            <View style={[styles.balanceIcon, { backgroundColor: COLORS.accent.blueDim }]}>
+              <Ionicons name="wallet-outline" size={14} color={COLORS.accent.blue} />
+            </View>
+            <Text style={styles.balanceCardLabel}>Wallet</Text>
+          </View>
+          <Text style={styles.balanceCardValue}>{sol.toFixed(4)}</Text>
+          <Text style={styles.balanceCardUnit}>SOL</Text>
+        </View>
+
+        {/* Vault Balance */}
+        <View style={[styles.balanceCard, styles.vaultCard]}>
+          <View style={styles.balanceCardHeader}>
+            <View style={[styles.balanceIcon, { backgroundColor: COLORS.accent.greenDim }]}>
+              <Ionicons name="shield-checkmark-outline" size={14} color={COLORS.accent.green} />
+            </View>
+            <Text style={styles.balanceCardLabel}>Vault</Text>
+          </View>
+          <Text style={[styles.balanceCardValue, vault > 0 && { color: COLORS.accent.green }]}>{vault.toFixed(4)}</Text>
+          <Text style={styles.balanceCardUnit}>SOL</Text>
+        </View>
+      </View>
+
+      {/* Action Buttons */}
       <View style={styles.actionRow}>
         <ActionButton 
           icon="add-circle-outline" 
@@ -70,8 +100,8 @@ export function VaultHero({ balance, solPriceUsd, onAction, disabled }: VaultHer
         <StatusItem 
           icon="shield-checkmark-outline" 
           label="Vault"
-          value="Secured" 
-          color={COLORS.accent.green} 
+          value={vault > 0 ? 'Funded' : 'Empty'}
+          color={vault > 0 ? COLORS.accent.green : COLORS.text.muted} 
         />
         <View style={styles.statusDivider} />
         <StatusItem 
@@ -166,6 +196,54 @@ const styles = StyleSheet.create({
     color: COLORS.accent.green,
   },
 
+  balanceCards: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.lg,
+  },
+  balanceCard: {
+    flex: 1,
+    backgroundColor: COLORS.bg.tertiary,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border.subtle,
+  },
+  vaultCard: {
+    borderColor: `${COLORS.accent.green}30`,
+  },
+  balanceCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: SPACING.sm,
+  },
+  balanceIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  balanceCardLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.text.muted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  balanceCardValue: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    letterSpacing: -0.5,
+  },
+  balanceCardUnit: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.text.muted,
+    marginTop: 2,
+  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

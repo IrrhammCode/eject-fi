@@ -6,7 +6,7 @@ import { PublicKey, Transaction, Connection, clusterApiUrl, LAMPORTS_PER_SOL } f
 import { usePrivy, useLoginWithOAuth, useEmbeddedSolanaWallet } from '@privy-io/expo';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { WalletState } from '../types';
-import { MOCK_WALLET_BALANCE } from '../utils/solana';
+import { MOCK_WALLET_BALANCE, MOCK_VAULT_BALANCE } from '../utils/solana';
 
 const SOLANA_RPC = process.env.EXPO_PUBLIC_SOLANA_RPC || 'https://devnet.helius-rpc.com/?api-key=25670c4c-3555-4582-b560-69be4f754491';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
@@ -35,18 +35,19 @@ export function useWallet() {
     connected: false,
     publicKey: null,
     balance: null,
+    vaultBalance: 0,
     connecting: false,
   });
 
   const fetchBalance = useCallback(async (pubkey: string) => {
-    // DEMO MOCK: Selalu kembalikan saldo palsu agar simulasi terlihat nyata
+    // DEMO MOCK: return fake balances for smooth demo
     return MOCK_WALLET_BALANCE;
   }, []);
 
   const refreshBalance = useCallback(async () => {
     if (wallet.publicKey) {
       const balance = await fetchBalance(wallet.publicKey);
-      if (balance !== null) setWallet(prev => ({ ...prev, balance }));
+      if (balance !== null) setWallet(prev => ({ ...prev, balance, vaultBalance: MOCK_VAULT_BALANCE }));
     }
   }, [wallet.publicKey, fetchBalance]);
 

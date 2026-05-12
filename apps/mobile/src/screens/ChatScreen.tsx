@@ -136,6 +136,7 @@ export function ChatScreen({
         {/* Massive Balance & Assurance */}
         <VaultHero 
           balance={wallet.balance} 
+          vaultBalance={wallet.vaultBalance}
           solPriceUsd={solPriceUsd} 
           onAction={handleChipAction}
           disabled={isProcessing}

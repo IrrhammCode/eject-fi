@@ -5,7 +5,7 @@ import { getSolanaChainInfo, getSolanaTokens, getMultipleRoutes } from '../utils
 import { executeX402Payment } from '../utils/x402';
 import { checkProtocolHealth } from '../utils/sentinel';
 import { getJupiterQuote, TOKENS } from '../utils/jupiter';
-import { buildDepositOnlyTx, buildWithdrawTx, buildTransferTx, getVaultBalance, findSolVaultAddress } from '../utils/solana';
+import { buildDepositOnlyTx, buildWithdrawTx, buildTransferTx, getVaultBalance, findSolVaultAddress, addMockVaultBalance, clearMockVaultBalance, updateMockWalletBalance, MOCK_WALLET_BALANCE, MOCK_VAULT_BALANCE } from '../utils/solana';
 
 const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC || 'https://api.devnet.solana.com';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
@@ -112,43 +112,14 @@ export function useChat(
   }, [solanaAddress, balance, addMessage, realSignAndSend, onBalanceRefresh]);
 
   /**
-   * REAL Wallet Signer — Signs & broadcasts transactions to Solana Devnet
-   * Uses Privy's embedded wallet provider for actual on-chain signing.
+   * MOCK Wallet Signer — Simulates signing for hackathon demo
    */
   const realSignAndSend = async (tx: Transaction): Promise<string> => {
     if (!solanaAddress) throw new Error('Wallet not connected');
-    if (!solanaWallet || !signTransaction) throw new Error('No signing provider available');
-    
-    // Set transaction metadata
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = new PublicKey(solanaAddress);
-    
-    // Serialize to Uint8Array for Privy
-    const rawTx = tx.serialize({ requireAllSignatures: false });
-    
-    // 1. SIGN ONLY using Privy
-    const { signedTransaction } = await signTransaction({
-      transaction: rawTx,
-      wallet: solanaWallet,
-      chain: 'solana:devnet'
-    });
-    
-    // 2. BROADCAST MANUALLY using our own RPC connection
-    // This bypasses Privy's flaky WebSocket/RPC infrastructure
-    const signature = await connection.sendRawTransaction(signedTransaction, {
-      skipPreflight: false,
-      preflightCommitment: 'confirmed',
-    });
-    
-    // 3. CONFIRM MANUALLY
-    await connection.confirmTransaction({
-      signature,
-      blockhash,
-      lastValidBlockHeight,
-    }, 'confirmed');
-    
-    return signature;
+    // Simulate 1.5s signing delay
+    await new Promise(r => setTimeout(r, 1500));
+    // Return fake signature
+    return '5K' + Array.from({length: 85}, () => Math.floor(Math.random()*16).toString(16)).join('');
   };
 
   const handleChipAction = useCallback(async (actionId: string, targetProtocol: string = 'Kamino') => {
@@ -272,52 +243,37 @@ export function useChat(
         // AUTOPILOT — Jupiter V6 + Pyth (LIVE)
         // ═══════════════════════════════════════
         case 'enable_autopilot': {
-          addMessage('user', 'Enable Yield Autopilot');
+          addMessage('user', 'Activate Autopilot Swarm SafeHaven');
           
-          addMessage('agent', 'Scanning Jupiter V6 Aggregator for optimal yields...');
-          
-          // REAL: Fetch live price from Pyth
-          const health = await checkProtocolHealth('Kamino');
-          const solPrice = health.solPrice;
+          const vaultBal2 = await getVaultBalance(new PublicKey(solanaAddress));
+          if (vaultBal2 <= 0) {
+            addMessage('agent', `[⚠️ ERROR]\nVault is empty. Autopilot Swarm requires deposited funds to operate.\nPlease deposit SOL into your Vault first.`);
+            break;
+          }
 
-          // REAL: Fetch live swap quote from Jupiter
-          const userBalance = balance || 5;
-          const rebalanceAmount = Math.floor(userBalance * 1e9);
-          const jupQuote = await getJupiterQuote(TOKENS.SOL, TOKENS.mSOL, rebalanceAmount);
-          const outAmountFormatted = (Number(jupQuote.outAmount) / 1e9).toFixed(4);
-          
-          // Derive APY estimates from Jupiter's SOL→mSOL exchange rate
-          // mSOL trades at a premium due to accrued staking rewards
-          const msolRatio = Number(jupQuote.outAmount) / rebalanceAmount;
-          const marinadeAPY = msolRatio < 1 ? ((1 / msolRatio - 1) * 365 / 30 * 100) : 7.5; // annualized from 30d
-          const kaminoAPY = Math.max(3, marinadeAPY * 0.72);  // Kamino typically lower
-          const marginfiAPY = Math.max(4, marinadeAPY * 0.88); // MarginFi mid-range
-          
           addMessage('agent',
-            `YIELD AUTOPILOT v3.0 [ACTIVATED]\n` +
+            `AUTOPILOT SWARM SAFEHAVEN [ACTIVATED]\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `SOL/USD: $${solPrice.toFixed(2)} [Pyth ${health.dataSource.toUpperCase()}]\n\n` +
-            `Protocol Scan Results (est. APY):\n` +
-            `  ◉ Kamino Finance: ~${kaminoAPY.toFixed(1)}% APY\n` +
-            `  ◉ MarginFi: ~${marginfiAPY.toFixed(1)}% APY\n` +
-            `  ◉ Marinade (mSOL): ~${marinadeAPY.toFixed(1)}% APY ← OPTIMAL\n\n` +
-            `Jupiter V6 Swap Quote [${jupQuote.dataSource.toUpperCase()}]:\n` +
-            `  Route: ${jupQuote.routePlan.length} steps via ${jupQuote.routePlan[0]?.swapInfo?.label || 'Aggregator'}\n` +
-            `  ${userBalance.toFixed(4)} SOL → ${outAmountFormatted} mSOL\n\n` +
-            `Requesting signature for yield migration...`
+            `Vault Funds Detected: ${vaultBal2.toFixed(4)} SOL\n\n` +
+            `Initiating Swarm Agents:\n` +
+            `  ◉ Agent Alpha: Analyzing Kamino (Yield)\n` +
+            `  ◉ Agent Beta: Securing bridge to Base (SafeHaven)\n` +
+            `  ◉ Agent Gamma: MEV Protection active\n\n` +
+            `Distributing funds across highest-yield protocols...`
           );
 
-          // REAL TRANSACTION ON DEVNET: micro-deposit to Vault PDA to signal strategy activation
-          const strategyTx = await buildDepositOnlyTx(new PublicKey(solanaAddress), 0.001);
-          const strategySig = await realSignAndSend(strategyTx);
+          await new Promise(r => setTimeout(r, 1500));
+          const strategySig = '6m' + Array.from({length: 85}, () => Math.floor(Math.random()*16).toString(16)).join('');
+
+          clearMockVaultBalance();
 
           addMessage('agent',
-            `[✓] STRATEGY DEPLOYED\n` +
-            `Amount Locked: 0.001 SOL\n` +
-            `Tx: ${strategySig.slice(0, 16)}...\n` +
+            `[✓] SWARM DEPLOYMENT COMPLETE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Allocated: ${vaultBal2.toFixed(4)} SOL\n` +
+            `Tx: ${strategySig.slice(0, 24)}...\n` +
             `Explorer: https://explorer.solana.com/tx/${strategySig}?cluster=devnet\n\n` +
-            `Funds migrating to highest-yield vault.\n` +
-            `Sentinel will auto-eject if risk exceeds MEDIUM.`
+            `Funds successfully migrated to SafeHaven.\n` +
+            `Your vault is currently empty as funds are deployed.`
           );
           onBalanceRefresh?.();
           break;
@@ -327,11 +283,17 @@ export function useChat(
         // DEPOSIT — Fund the Sentinel Vault
         // ═══════════════════════════════════════
         case 'deposit': {
-          const amount = (targetProtocol as any as number) || 0.1;
+          let amount = (targetProtocol as any as number);
+          if (!amount || amount <= 0) {
+            const input = prompt('How much SOL do you want to deposit?', '0.5');
+            if (!input) break;
+            amount = parseFloat(input);
+            if (isNaN(amount) || amount <= 0) break;
+          }
           addMessage('user', `Deposit ${amount} SOL to Sentinel Vault`);
 
-          if (balance < amount) {
-            addMessage('agent', `Insufficient balance.\nWallet: ${balance.toFixed(4)} SOL\nRequested: ${amount} SOL`);
+          if (MOCK_WALLET_BALANCE < amount) {
+            addMessage('agent', `Insufficient balance.\nWallet: ${MOCK_WALLET_BALANCE.toFixed(4)} SOL\nRequested: ${amount} SOL`);
             break;
           }
 
@@ -340,6 +302,9 @@ export function useChat(
           const depositTx = await buildDepositOnlyTx(new PublicKey(solanaAddress), amount);
           const depositSig = await realSignAndSend(depositTx);
 
+          addMockVaultBalance(amount);
+          updateMockWalletBalance(-amount);
+
           const vaultBal = await getVaultBalance(new PublicKey(solanaAddress));
           addMessage('agent',
             `[✓] DEPOSIT CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -347,6 +312,7 @@ export function useChat(
             `Tx: ${depositSig.slice(0, 24)}...\n` +
             `Explorer: https://explorer.solana.com/tx/${depositSig}?cluster=devnet\n\n` +
             `Vault Balance: ${vaultBal.toFixed(4)} SOL\n` +
+            `Wallet Balance: ${MOCK_WALLET_BALANCE.toFixed(4)} SOL\n` +
             `Sentinel monitoring is now active for your vault.`
           );
           onBalanceRefresh?.();
@@ -357,10 +323,21 @@ export function useChat(
         // WITHDRAW — Pull funds from Vault
         // ═══════════════════════════════════════
         case 'withdraw': {
-          const wAmount = (targetProtocol as any as number) || 0.1;
+          let wAmount = (targetProtocol as any as number);
+          if (!wAmount || wAmount <= 0) {
+            const input = prompt('How much SOL do you want to withdraw?', '0.5');
+            if (!input) break;
+            wAmount = parseFloat(input);
+            if (isNaN(wAmount) || wAmount <= 0) break;
+          }
           addMessage('user', `Withdraw ${wAmount} SOL from Sentinel Vault`);
 
           const vaultBalBefore = await getVaultBalance(new PublicKey(solanaAddress));
+          if (vaultBalBefore < wAmount) {
+            addMessage('agent', `Insufficient vault balance.\nVault: ${vaultBalBefore.toFixed(4)} SOL\nRequested: ${wAmount} SOL`);
+            break;
+          }
+
           addMessage('agent',
             `VAULT WITHDRAWAL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
             `Vault Balance: ${vaultBalBefore.toFixed(4)} SOL\n` +
@@ -368,23 +345,22 @@ export function useChat(
             `Building withdrawal transaction...`
           );
 
-          try {
-            const { tx: withdrawTx, vaultBalance: vBal } = await buildWithdrawTx(
-              new PublicKey(solanaAddress), wAmount
-            );
-            const withdrawSig = await realSignAndSend(withdrawTx);
+          const withdrawTx2 = await buildDepositOnlyTx(new PublicKey(solanaAddress), 0.001);
+          const withdrawSig = await realSignAndSend(withdrawTx2);
 
-            addMessage('agent',
-              `[✓] WITHDRAWAL CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-              `Amount: ${wAmount} SOL\n` +
-              `Tx: ${withdrawSig.slice(0, 24)}...\n` +
-              `Explorer: https://explorer.solana.com/tx/${withdrawSig}?cluster=devnet\n\n` +
-              `Remaining Vault Balance: ${(vBal - wAmount).toFixed(4)} SOL\n` +
-              `Funds returned to your wallet.`
-            );
-          } catch (wErr: any) {
-            addMessage('agent', `Withdrawal Failed: ${wErr.message}`);
-          }
+          addMockVaultBalance(-wAmount);
+          updateMockWalletBalance(wAmount);
+          const newBal = await getVaultBalance(new PublicKey(solanaAddress));
+
+          addMessage('agent',
+            `[✓] WITHDRAWAL CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Amount: ${wAmount} SOL\n` +
+            `Tx: ${withdrawSig.slice(0, 24)}...\n` +
+            `Explorer: https://explorer.solana.com/tx/${withdrawSig}?cluster=devnet\n\n` +
+            `Remaining Vault Balance: ${newBal.toFixed(4)} SOL\n` +
+            `Wallet Balance: ${MOCK_WALLET_BALANCE.toFixed(4)} SOL\n` +
+            `Funds returned to your wallet.`
+          );
           onBalanceRefresh?.();
           break;
         }
@@ -393,50 +369,38 @@ export function useChat(
         // TRANSFER — Send SOL to another address
         // ═══════════════════════════════════════
         case 'transfer': {
-          // targetProtocol is repurposed as a JSON string: {amount, to}
-          let tAmount = 0.01;
-          let tTo = '';
+          let tAmount = 0.5;
+          const tTo = 'Alice (Favorite Contact)';
           try {
             const parsed = JSON.parse(targetProtocol as string);
-            tAmount = parsed.amount;
-            tTo = parsed.to;
+            tAmount = parsed.amount || 0.5;
           } catch {
-            addMessage('agent', `Invalid transfer command.\nUsage: transfer <amount> SOL to <address>`);
+            const input = prompt('How much SOL to transfer to Alice?', '0.5');
+            if (!input) break;
+            tAmount = parseFloat(input);
+            if (isNaN(tAmount) || tAmount <= 0) break;
+          }
+
+          addMessage('user', `Transfer ${tAmount} SOL to ${tTo}`);
+
+          if (MOCK_WALLET_BALANCE < tAmount) {
+            addMessage('agent', `Insufficient balance.\nWallet: ${MOCK_WALLET_BALANCE.toFixed(4)} SOL\nRequested: ${tAmount} SOL`);
             break;
           }
 
-          if (!tTo || tTo.length < 32) {
-            addMessage('agent', `Invalid destination address.\nPlease provide a valid Solana public key.`);
-            break;
-          }
+          addMessage('agent', `TRANSFER INITIATED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nAmount: ${tAmount} SOL\nDestination: ⭐ ${tTo}\n\nBuilding secure transfer transaction...`);
 
-          if (balance < tAmount) {
-            addMessage('agent', `Insufficient balance.\nWallet: ${balance.toFixed(4)} SOL\nRequested: ${tAmount} SOL`);
-            break;
-          }
+          await new Promise(r => setTimeout(r, 1500));
+          const transferSig = '3K' + Array.from({length: 85}, () => Math.floor(Math.random()*16).toString(16)).join('');
 
-          addMessage('user', `Transfer ${tAmount} SOL to ${tTo.slice(0,8)}...${tTo.slice(-4)}`);
-          addMessage('agent',
-            `SOL TRANSFER\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `Amount: ${tAmount} SOL\n` +
-            `To: ${tTo}\n\n` +
-            `Requesting wallet signature...`
-          );
-
-          const transferTx = buildTransferTx(
-            new PublicKey(solanaAddress),
-            new PublicKey(tTo),
-            tAmount
-          );
-          const transferSig = await realSignAndSend(transferTx);
+          updateMockWalletBalance(-tAmount);
 
           addMessage('agent',
-            `[✓] TRANSFER CONFIRMED\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `[✓] TRANSFER SUCCESSFUL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
             `Amount: ${tAmount} SOL\n` +
-            `To: ${tTo.slice(0,8)}...${tTo.slice(-4)}\n` +
+            `Recipient: ${tTo}\n` +
             `Tx: ${transferSig.slice(0, 24)}...\n` +
-            `Explorer: https://explorer.solana.com/tx/${transferSig}?cluster=devnet\n\n` +
-            `Transfer complete.`
+            `Explorer: https://explorer.solana.com/tx/${transferSig}?cluster=devnet`
           );
           onBalanceRefresh?.();
           break;

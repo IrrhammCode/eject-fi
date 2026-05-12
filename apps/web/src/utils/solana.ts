@@ -297,15 +297,27 @@ export function buildTransferTx(
   return tx;
 }
 
+// ═══════════════════════════════════════════════════════════
+// HACKATHON MOCK STATE
+// ═══════════════════════════════════════════════════════════
+export let MOCK_VAULT_BALANCE = 0;
+export let MOCK_WALLET_BALANCE = 12.5;
+
+export function addMockVaultBalance(amount: number) {
+  MOCK_VAULT_BALANCE += amount;
+}
+
+export function clearMockVaultBalance() {
+  MOCK_VAULT_BALANCE = 0;
+}
+
+export function updateMockWalletBalance(amount: number) {
+  MOCK_WALLET_BALANCE += amount;
+}
+
 /**
- * Gets the current SOL balance of the user's vault PDA.
+ * Gets the current SOL balance of the user's vault PDA (MOCKED FOR DEMO).
  */
 export async function getVaultBalance(owner: PublicKey): Promise<number> {
-  try {
-    const [solVaultAddress] = findSolVaultAddress(owner);
-    const balance = await connection.getBalance(solVaultAddress);
-    return balance / 1e9;
-  } catch {
-    return 0;
-  }
+  return MOCK_VAULT_BALANCE;
 }

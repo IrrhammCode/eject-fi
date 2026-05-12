@@ -601,6 +601,54 @@
   font-weight: 700;
 }
 
+.balance-cards {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+.balance-card {
+  flex: 1;
+  background: rgba(255,255,255,0.03);
+  border-radius: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.balance-card.vault-card {
+  border-color: rgba(16,185,129,0.2);
+}
+.balance-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.balance-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.balance-card-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.5px;
+}
+.balance-card-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  letter-spacing: -0.5px;
+}
+.balance-card-unit {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.35);
+  margin-top: 2px;
+}
+
 .vault-divider {
   height: 1px;
   background: linear-gradient(90deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.02) 100%);

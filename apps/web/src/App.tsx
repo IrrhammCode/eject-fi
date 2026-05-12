@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useChat } from './hooks/useChat';
 import { getHeliusStats } from './utils/sentinel';
+import { MOCK_WALLET_BALANCE, MOCK_VAULT_BALANCE } from './utils/solana';
 import './App.css';
 
 function App() {
@@ -24,7 +25,8 @@ function App() {
                     || wallets.find((w) => w.chainType === 'solana');
 
   const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
-  const [balance, setBalance] = useState(0);
+  const [balance, setBalance] = useState(MOCK_WALLET_BALANCE);
+  const [vaultBalance, setVaultBalance] = useState(0);
   const [solPriceUsd, setSolPriceUsd] = useState(0);
   const [prevSolPrice, setPrevSolPrice] = useState(0);
   const [swarmCount, setSwarmCount] = useState(3);
@@ -93,22 +95,9 @@ function App() {
 
   const fetchBalance = async () => {
     if (!solanaAddress) return;
-    try {
-      const response = await fetch(`https://api.devnet.solana.com`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getBalance',
-          params: [solanaAddress]
-        })
-      });
-      const data = await response.json();
-      setBalance(data.result.value / 1e9);
-    } catch (e) {
-      console.error('Balance fetch failed');
-    }
+    // DEMO MOCK: use in-memory state
+    setBalance(MOCK_WALLET_BALANCE);
+    setVaultBalance(MOCK_VAULT_BALANCE);
   };
 
   useEffect(() => {
@@ -263,7 +252,8 @@ function App() {
     }
   }
 
-  const usd = solPriceUsd > 0 ? (balance * solPriceUsd).toFixed(2) : '—';
+  const totalSol = balance + vaultBalance;
+  const usd = solPriceUsd > 0 ? (totalSol * solPriceUsd).toFixed(2) : '—';
   const priceDelta = prevSolPrice > 0 && solPriceUsd > 0
     ? (((solPriceUsd - prevSolPrice) / prevSolPrice) * 100)
     : 0;
@@ -321,7 +311,7 @@ function App() {
               <div className="vault-label">Portfolio Value</div>
               <div className="vault-usd">${usd}</div>
               <div className="sol-row">
-                <span className="sol-value">{balance.toFixed(4)} SOL</span>
+                <span className="sol-value">{totalSol.toFixed(4)} SOL</span>
                 {solPriceUsd > 0 && (
                   <div className="change-badge" style={{
                     background: priceDelta >= 0 ? 'var(--accent-green-dim)' : 'var(--accent-red-dim)',
@@ -330,6 +320,30 @@ function App() {
                     <span style={{ color: priceDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{priceChangeStr}</span>
                   </div>
                 )}
+              </div>
+
+              {/* Dual Balance Cards */}
+              <div className="balance-cards">
+                <div className="balance-card">
+                  <div className="balance-card-header">
+                    <div className="balance-icon" style={{ background: 'rgba(59,130,246,0.12)' }}>
+                      <Wallet size={14} color="#3B82F6" />
+                    </div>
+                    <span className="balance-card-label">WALLET</span>
+                  </div>
+                  <div className="balance-card-value">{balance.toFixed(4)}</div>
+                  <div className="balance-card-unit">SOL</div>
+                </div>
+                <div className="balance-card vault-card">
+                  <div className="balance-card-header">
+                    <div className="balance-icon" style={{ background: 'rgba(16,185,129,0.12)' }}>
+                      <Shield size={14} color="#10B981" />
+                    </div>
+                    <span className="balance-card-label">VAULT</span>
+                  </div>
+                  <div className="balance-card-value" style={vaultBalance > 0 ? { color: '#10B981' } : {}}>{vaultBalance.toFixed(4)}</div>
+                  <div className="balance-card-unit">SOL</div>
+                </div>
               </div>
 
               <div className="vault-divider" />
